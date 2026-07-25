@@ -17,7 +17,7 @@ import {
 // 与 /api/server 和 /api/servers 返回的字段保持一致，便于页面直接合并
 function buildPayloadForBroadcast(id, metrics = {}, extra = {}) {
   const payload = {};
-  mergeMetricsIntoServer(payload, metrics);
+  mergeMetricsIntoServer(payload, metrics, extra.latencySettings);
   payload.id = id;
   payload.region = extra.region || '';
   payload.agent_version = extra.agentVersion || metrics.agent_version || '';
@@ -83,11 +83,12 @@ function normalizeMetricSamples(data) {
   return samples.slice(-MAX_BATCH_SAMPLES);
 }
 
-function toBroadcastSamples(id, samples, regionCode, agentVersion = '') {
+function toBroadcastSamples(id, samples, regionCode, agentVersion = '', latencySettings = null) {
   return samples.map(sample => {
     const payload = buildPayloadForBroadcast(id, sample.metrics || {}, {
       region: regionCode,
       agentVersion,
+      latencySettings,
       timestamp: sample.ts
     });
     const filtered = Object.assign({}, payload);
@@ -217,6 +218,12 @@ export async function handleUpdate(request, env, ctx) {
 
     // 获取最后一条插入（如果是批量数据，取最后一个样本）
     const latestSample = samples[samples.length - 1];
+    const settings = await loadSiteSettings(env.DB);
+    const latencySettings = {
+      ...settings,
+      latency_profile: serverDetail.latency_profile || settings.latency_profile,
+      latency_targets: serverDetail.latency_targets || settings.latency_targets
+    };
     await saveMetricsHistory(
       env.DB,
       id,
@@ -224,10 +231,11 @@ export async function handleUpdate(request, env, ctx) {
       latestSample.metrics,
       regionCode,
       latestSample.ts,
-      agentVersion
+      agentVersion,
+      latencySettings
     );
 
-    const broadcastSamples = toBroadcastSamples(id, samples, regionCode, agentVersion);
+    const broadcastSamples = toBroadcastSamples(id, samples, regionCode, agentVersion, latencySettings);
     // 加入批量队列，由后台定时任务统一推送到 DO
     queueBroadcastSamples(id, broadcastSamples);
     ctx.waitUntil(_ensureBatchFlush(env));
@@ -241,7 +249,6 @@ export async function handleUpdate(request, env, ctx) {
     }
 
     try {
-      const settings = await loadSiteSettings(env.DB);
       const descriptor = await describeAgentConfig(serverDetail, settings);
       const clientConfigMd5 = (request.headers.get(AGENT_CONFIG_MD5_HEADER) || '').trim().toLowerCase();
       const hasCorrection = descriptor.correction !== null;

@@ -1,6 +1,11 @@
 import { md5Hash } from './common.js';
+import {
+  LATENCY_CONFIG_SCHEMA_VERSION,
+  encodeAgentLatencyTargets,
+  resolveServerLatencyProfile
+} from '../fork/latencyProfile.js';
 
-export const AGENT_CONFIG_SCHEMA_VERSION = 2;
+export const AGENT_CONFIG_SCHEMA_VERSION = LATENCY_CONFIG_SCHEMA_VERSION;
 export const AGENT_CONFIG_SCHEMA_HEADER = 'X-Agent-Config-Schema';
 export const AGENT_CONFIG_MD5_HEADER = 'X-Agent-Config-Md5';
 export const MAX_TRAFFIC_CORRECTION_GB = 1000000;
@@ -151,19 +156,14 @@ export function buildAgentConfig(server, settings = null) {
     ? resetNumber
     : 1;
 
-  const customCt = sanitizePingNode(server?.custom_ct || settings?.custom_ct || '');
-  const customCu = sanitizePingNode(server?.custom_cu || settings?.custom_cu || '');
-  const customCm = sanitizePingNode(server?.custom_cm || settings?.custom_cm || '');
-  const customBd = sanitizePingNode(server?.custom_bd || settings?.custom_bd || '');
+  const latencyProfile = resolveServerLatencyProfile(server, settings);
 
   return {
     collect_interval: collectInterval,
     report_interval: reportInterval,
     reset_day: resetDay,
-    custom_ct: customCt,
-    custom_cu: customCu,
-    custom_cm: customCm,
-    custom_bd: customBd,
+    latency_profile: latencyProfile.id,
+    latency_targets: encodeAgentLatencyTargets(latencyProfile.targets),
     schema_version: AGENT_CONFIG_SCHEMA_VERSION
   };
 }
@@ -173,10 +173,8 @@ export function serializeAgentConfig(config) {
     `&report_interval=${config.report_interval}` +
     `&reset_day=${config.reset_day}` +
     `&schema_version=${config.schema_version}` +
-    `&custom_ct=${config.custom_ct}` +
-    `&custom_cu=${config.custom_cu}` +
-    `&custom_cm=${config.custom_cm}` +
-    `&custom_bd=${config.custom_bd}`;
+    `&latency_profile=${config.latency_profile}` +
+    `&latency_targets=${config.latency_targets}`;
 }
 
 export function serializeCorrection(correction) {

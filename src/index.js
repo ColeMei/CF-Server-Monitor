@@ -12,6 +12,7 @@ import { AppError, createSuccessResponse, createUnauthorizedResponse, createBadR
 import { verifyTurnstileToken } from './utils/common.js';
 import { getCorsAllowedOrigins, createOptionsResponse, applyCors } from './utils/cors.js';
 import { getRemoteVersion } from './utils/version.js';
+import { decorateLatencyRecord } from './fork/latencyMetrics.js';
 // Durable Objects: 实时指标广播
 // 显式 import + extends，确保 wrangler 静态分析器能在入口文件直接识别此 DO 类
 import { MetricsBroadcaster as _MetricsBroadcaster }
@@ -104,6 +105,11 @@ async function fetchHistoryData(env, request, id, hours, columns, sys = null) {
   
   const server = await getServerDetail(env.DB, id, isLoggedIn);
   if (!server) return createNotFoundResponse();
+  const latencySettings = {
+    ...sys,
+    latency_profile: server.latency_profile || sys.latency_profile,
+    latency_targets: server.latency_targets || sys.latency_targets
+  };
   
   // 最多查询7天数据
   const clampedHours = Math.min(hours, 168);
@@ -117,6 +123,7 @@ async function fetchHistoryData(env, request, id, hours, columns, sys = null) {
   let data;
   try {
     data = await getMetricsHistory(env.DB, id, clampedHours, columns, server);
+    data = data.map(row => decorateLatencyRecord(row, latencySettings));
   } catch (e) {
     const message = e && e.message ? e.message : String(e);
     if (/no such column/i.test(message)) {
@@ -290,7 +297,7 @@ export default {
         await ensureSiteSettings();
         const id = url.searchParams.get('id');
         const hours = parseFloat(url.searchParams.get('hours') || '24');
-        const allColumns = 'cpu, gpu, gpu_info, ram_total, ram_used, disk_total, disk_used, processes, net_in_speed, net_out_speed, tcp_conn, udp_conn, ping_ct, ping_cu, ping_cm, ping_bd, loss_ct, loss_cu, loss_cm, loss_bd, swap_total, swap_used, load_avg, region';
+        const allColumns = 'cpu, gpu, gpu_info, ram_total, ram_used, disk_total, disk_used, processes, net_in_speed, net_out_speed, tcp_conn, udp_conn, latency_profile, latency_json, ping_ct, ping_cu, ping_cm, ping_bd, loss_ct, loss_cu, loss_cm, loss_bd, swap_total, swap_used, load_avg, region';
         // 后续版本可以删掉region 字段，用于升级数据库提示
         return fetchHistoryData(env, request, id, hours, allColumns, sys);
       }},

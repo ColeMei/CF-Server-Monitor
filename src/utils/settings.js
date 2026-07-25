@@ -1,7 +1,12 @@
+import {
+  DEFAULT_LATENCY_PROFILE_ID,
+  DEFAULT_LATENCY_TARGETS_JSON
+} from '../fork/latencyProfile.js';
+
 const CURRENT_VERSION = '2.7.11';
 export const DEFAULT_SITE_TITLE = 'Cloudflare Server Monitor';
 export const APPEARANCE_FIELDS = ['site_title', 'custom_bg', 'custom_head', 'custom_script', 'csp_static', 'csp_api'];
-export const SITE_FIELDS = ['is_public', 'show_price', 'show_expire', 'show_tf', 'show_time', 'show_long_history', 'tg_notify', 'tg_bot_token', 'tg_chat_id', 'turnstile_enabled', 'turnstile_login_enabled', 'turnstile_site_key', 'turnstile_secret_key', 'jwt_secret', 'username', 'password', 'cloudflare_account_id', 'cloudflare_token', 'custom_ct', 'custom_cu', 'custom_cm', 'custom_bd', 'expire_reminder','history_id_optimized','servers_optimized'];
+export const SITE_FIELDS = ['is_public', 'show_price', 'show_expire', 'show_tf', 'show_time', 'show_long_history', 'tg_notify', 'tg_bot_token', 'tg_chat_id', 'turnstile_enabled', 'turnstile_login_enabled', 'turnstile_site_key', 'turnstile_secret_key', 'jwt_secret', 'username', 'password', 'cloudflare_account_id', 'cloudflare_token', 'custom_ct', 'custom_cu', 'custom_cm', 'custom_bd', 'latency_profile', 'latency_targets', 'expire_reminder','history_id_optimized','servers_optimized'];
 
 const SITE_SETTINGS_TTL = 120 * 1000;
 let cachedSiteSettings = null;
@@ -35,6 +40,8 @@ const defaults = {
   custom_cu: 'gd-cu-dualstack.ip.zstaticcdn.com',
   custom_cm: 'gd-cm-dualstack.ip.zstaticcdn.com',
   custom_bd: 'lf3-ips.zstaticcdn.com',
+  latency_profile: DEFAULT_LATENCY_PROFILE_ID,
+  latency_targets: DEFAULT_LATENCY_TARGETS_JSON,
   expire_reminder: 'false',
   history_id_optimized: 'false',
   servers_optimized: 'false'

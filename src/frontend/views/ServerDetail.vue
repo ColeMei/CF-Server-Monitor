@@ -235,10 +235,11 @@
             {{ trans.latencyMonitor }}
           </span>
           <div class="ping-indicator">
-            <span class="ping-ct">{{ trans.pingCt }} <b>{{ avgPingCt !== null ? avgPingCt + 'ms' : 'Timeout' }}</b></span>
-            <span class="ping-cu">{{ trans.pingCu }} <b>{{ avgPingCu !== null ? avgPingCu + 'ms' : 'Timeout' }}</b></span>
-            <span class="ping-cm">{{ trans.pingCm }} <b>{{ avgPingCm !== null ? avgPingCm + 'ms' : 'Timeout' }}</b></span>
-            <span class="ping-bd">{{ trans.pingBd }} <b>{{ avgPingBd !== null ? avgPingBd + 'ms' : 'Timeout' }}</b></span>
+            <span
+              v-for="(target, index) in latencyTargets"
+              :key="target.key"
+              :style="{ color: getLatencyColor(index) }"
+            >{{ target.label }} <b>{{ averageLatency[target.key] !== null && averageLatency[target.key] !== undefined ? averageLatency[target.key] + 'ms' : 'Timeout' }}</b></span>
           </div>
         </div>
         <div class="chart-body">
@@ -253,10 +254,12 @@
             {{ trans.packetLoss || 'Packet Loss' }}
           </span>
           <div class="ping-indicator">
-            <span v-if="avgLossCt !== null" class="ping-ct">{{ trans.pingCt }} <b>{{ avgLossCt }}%</b></span>
-            <span v-if="avgLossCu !== null" class="ping-cu">{{ trans.pingCu }} <b>{{ avgLossCu }}%</b></span>
-            <span v-if="avgLossCm !== null" class="ping-cm">{{ trans.pingCm }} <b>{{ avgLossCm }}%</b></span>
-            <span v-if="avgLossBd !== null" class="ping-bd">{{ trans.pingBd }} <b>{{ avgLossBd }}%</b></span>
+            <span
+              v-for="(target, index) in latencyTargets"
+              v-show="averageLoss[target.key] !== null && averageLoss[target.key] !== undefined"
+              :key="target.key"
+              :style="{ color: getLatencyColor(index) }"
+            >{{ target.label }} <b>{{ averageLoss[target.key] }}%</b></span>
           </div>
         </div>
         <div class="chart-body">
@@ -300,6 +303,12 @@ import { t, currentLang, useTranslation } from '../utils/i18n'
 import { CHART } from '../utils/constants'
 import { formatDateTime } from '../utils/time.js'
 import useTheme from '../composables/useTheme'
+import {
+  getLatencyColor,
+  getLatencyMeasurement,
+  getLatencyTargets,
+  isLatencyLossValid
+} from '../fork/latency.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -400,14 +409,8 @@ const historyLoaded = ref(false)
 const charts = {}
 const chartsReady = ref(false)
 const hasLossHistoryData = ref(false)
-const avgPingCt = ref(null)
-const avgPingCu = ref(null)
-const avgPingCm = ref(null)
-const avgPingBd = ref(null)
-const avgLossCt = ref(null)
-const avgLossCu = ref(null)
-const avgLossCm = ref(null)
-const avgLossBd = ref(null)
+const averageLatency = ref({})
+const averageLoss = ref({})
 let isInitializingCharts = false
 let databaseUpgradeAlertShown = false
 
@@ -428,10 +431,16 @@ const parseLoadAvg = (loadAvgStr) => {
   return [load1, load5, load15]
 }
 
-const isLossValid = (value) => value !== null && value !== undefined && value !== '' && !Number.isNaN(parseFloat(value))
-const formatLoss = (value) => isLossValid(value) ? `${Math.max(0, Math.min(100, parseFloat(value))).toFixed(0)}%` : ''
-const hasLossData = computed(() => hasLossHistoryData.value || ['loss_ct', 'loss_cu', 'loss_cm', 'loss_bd'].some(key => isLossValid(server.value[key])))
-const formatPing = (value) => (value === null || value === undefined || value === '' || value === 'null') ? 'Timeout' : `${value}ms`
+const latencyTargets = computed(() => getLatencyTargets(server.value))
+const latencyProfileSignature = computed(() => (
+  `${server.value.latency_profile || ''}:${latencyTargets.value.map(target => target.key).join(',')}`
+))
+const hasLossData = computed(() => (
+  hasLossHistoryData.value ||
+  latencyTargets.value.some(target => (
+    isLatencyLossValid(getLatencyMeasurement(server.value, target.key).loss_pct)
+  ))
+))
 
 const parseBootTimeToMs = (bootTime) => {
   if (!bootTime) return null
@@ -493,7 +502,7 @@ const ds = (label, color, opts = {}) => ({
   pointRadius: 0, hoverRadius: 5, spanGaps: false, ...opts
 })
 
-const CHART_DEFS = [
+const getChartDefs = () => [
   { key: 'cpu', ref: () => cpuChartRef.value, datasets: [ds('CPU', '#00d4aa', { fill: true })], unit: '%' },
   { key: 'gpu', ref: () => gpuChartRef.value, datasets: [ds('GPU', '#ff7b72', { fill: true })], unit: '%' },
   { key: 'ram', ref: () => ramChartRef.value, datasets: [ds('Memory', '#b392f0', { fill: true }), ds('Swap', '#ffb870', { fill: true })], unit: '%', legend: true },
@@ -501,8 +510,8 @@ const CHART_DEFS = [
   { key: 'proc', ref: () => procChartRef.value, datasets: [ds('Processes', '#f778ba', { fill: true })] },
   { key: 'net', ref: () => netChartRef.value, datasets: [ds('Download', '#00d4aa', { fill: true }), ds('Upload', '#4da6ff', { fill: true })], legend: true, formatValue: (v) => formatBytes(v) + '/s', tickFormat: (v) => formatBytes(v) },
   { key: 'conn', ref: () => connChartRef.value, datasets: [ds('TCP', '#b392f0'), ds('UDP', '#f778ba')], legend: true },
-  { key: 'ping', ref: () => pingChartRef.value, datasets: [ds('CT', '#00d4aa', { tension: 0.3 }), ds('CU', '#ffb870', { tension: 0.3 }), ds('CM', '#4da6ff', { tension: 0.3 }), ds('BD', '#b392f0', { tension: 0.3 })], unit: ' ms', legend: true },
-  { key: 'loss', ref: () => lossChartRef.value, datasets: [ds('CT', '#00d4aa', { tension: 0.3 }), ds('CU', '#ffb870', { tension: 0.3 }), ds('CM', '#4da6ff', { tension: 0.3 }), ds('BD', '#b392f0', { tension: 0.3 })], unit: '%', legend: true },
+  { key: 'ping', ref: () => pingChartRef.value, datasets: latencyTargets.value.map((target, index) => ds(target.label, getLatencyColor(index), { tension: 0.3 })), unit: ' ms', legend: true },
+  { key: 'loss', ref: () => lossChartRef.value, datasets: latencyTargets.value.map((target, index) => ds(target.label, getLatencyColor(index), { tension: 0.3 })), unit: '%', legend: true },
   { key: 'load', ref: () => loadChartRef.value, datasets: [ds(trans.value.load1m || '1 Min', '#00d4aa', { tension: 0.3 }), ds(trans.value.load5m || '5 Min', '#ffb870', { tension: 0.3 }), ds(trans.value.load15m || '15 Min', '#4da6ff', { tension: 0.3 })], legend: true }
 ]
 
@@ -616,7 +625,7 @@ const initCharts = () => {
     }
   })
 
-  for (const def of CHART_DEFS) {
+  for (const def of getChartDefs()) {
     const ref = def.ref()
     if (!ref) continue
     charts[def.key] = new Chart(ref.getContext('2d'), {
@@ -755,6 +764,12 @@ const fieldAccessor = (field, allowZero = false) => (d) => {
   return allowZero ? val : (val > 0 ? val : null)
 }
 
+const latencyAccessor = (targetKey, field, allowZero = false) => (record) => {
+  const value = Number(getLatencyMeasurement(record, targetKey)[field])
+  if (!Number.isFinite(value)) return null
+  return allowZero ? value : (value > 0 ? value : null)
+}
+
 const updateLoadChart = (chart, dataPoints) => {
   if (!chart) return
 
@@ -799,7 +814,9 @@ const loadAllHistory = async (hours) => {
     const allData = await fetchAllHistory(serverId, hours, apiIndex.value)
 
     if (allData.length > 0) {
-      hasLossHistoryData.value = allData.some(item => ['loss_ct', 'loss_cu', 'loss_cm', 'loss_bd'].some(key => isLossValid(item[key])))
+      hasLossHistoryData.value = allData.some(item => latencyTargets.value.some(target => (
+        isLatencyLossValid(getLatencyMeasurement(item, target.key).loss_pct)
+      )))
 
       updateChartDataset(charts.cpu, 0, allData, fieldAccessor('cpu'))
       updateChartDataset(charts.gpu, 0, allData, fieldAccessor('gpu', true))
@@ -811,28 +828,27 @@ const loadAllHistory = async (hours) => {
       updateChartDataset(charts.net, 1, allData, fieldAccessor('net_out_speed', true))
       updateChartDataset(charts.conn, 0, allData, fieldAccessor('tcp_conn', true))
       updateChartDataset(charts.conn, 1, allData, fieldAccessor('udp_conn', true))
-      updateChartDataset(charts.ping, 0, allData, fieldAccessor('ping_ct', true))
-      updateChartDataset(charts.ping, 1, allData, fieldAccessor('ping_cu', true))
-      updateChartDataset(charts.ping, 2, allData, fieldAccessor('ping_cm', true))
-      updateChartDataset(charts.ping, 3, allData, fieldAccessor('ping_bd', true))
-      updateChartDataset(charts.loss, 0, allData, fieldAccessor('loss_ct', true))
-      updateChartDataset(charts.loss, 1, allData, fieldAccessor('loss_cu', true))
-      updateChartDataset(charts.loss, 2, allData, fieldAccessor('loss_cm', true))
-      updateChartDataset(charts.loss, 3, allData, fieldAccessor('loss_bd', true))
+      latencyTargets.value.forEach((target, index) => {
+        updateChartDataset(charts.ping, index, allData, latencyAccessor(target.key, 'rtt_ms', true))
+        updateChartDataset(charts.loss, index, allData, latencyAccessor(target.key, 'loss_pct', true))
+      })
       updateLoadChart(charts.load, allData)
 
-      const avg = (arr, field, skipZero = true) => {
-        const vals = arr.map(d => parseFloat(d[field])).filter(v => !isNaN(v) && (skipZero ? v !== 0 : true))
-        return vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : null
+      const avgMeasurement = (arr, targetKey, field, skipZero = true) => {
+        const vals = arr
+          .map(item => Number(getLatencyMeasurement(item, targetKey)[field]))
+          .filter(value => Number.isFinite(value) && (skipZero ? value !== 0 : true))
+        const total = vals.reduce((sum, value) => sum + value, 0)
+        return vals.length ? Math.round(total / vals.length) : null
       }
-      avgPingCt.value = avg(allData, 'ping_ct')
-      avgPingCu.value = avg(allData, 'ping_cu')
-      avgPingCm.value = avg(allData, 'ping_cm')
-      avgPingBd.value = avg(allData, 'ping_bd')
-      avgLossCt.value = avg(allData, 'loss_ct', false)
-      avgLossCu.value = avg(allData, 'loss_cu', false)
-      avgLossCm.value = avg(allData, 'loss_cm', false)
-      avgLossBd.value = avg(allData, 'loss_bd', false)
+      averageLatency.value = Object.fromEntries(latencyTargets.value.map(target => [
+        target.key,
+        avgMeasurement(allData, target.key, 'rtt_ms')
+      ]))
+      averageLoss.value = Object.fromEntries(latencyTargets.value.map(target => [
+        target.key,
+        avgMeasurement(allData, target.key, 'loss_pct', false)
+      ]))
     }
 
     updateAllChartTimeUnits(hours)
@@ -897,7 +913,7 @@ const appendDataToChart = (chart, datasetIndex, timestamp, value, isPing = false
   if (isPing) {
     const val = parseFloat(value)
     yVal = (val > 0) ? val : null
-  } else if (emptyAsNull && !isLossValid(value)) {
+  } else if (emptyAsNull && !isLatencyLossValid(value)) {
     yVal = null
   } else {
     yVal = parseFloat(value) || 0
@@ -985,14 +1001,11 @@ const fetchCurrentStatus = async (incomingData) => {
       appendDataToChart(charts.net, 1, dataTimestamp, data.net_out_speed)
       appendDataToChart(charts.conn, 0, dataTimestamp, data.tcp_conn)
       appendDataToChart(charts.conn, 1, dataTimestamp, data.udp_conn)
-      appendDataToChart(charts.ping, 0, dataTimestamp, data.ping_ct, true)
-      appendDataToChart(charts.ping, 1, dataTimestamp, data.ping_cu, true)
-      appendDataToChart(charts.ping, 2, dataTimestamp, data.ping_cm, true)
-      appendDataToChart(charts.ping, 3, dataTimestamp, data.ping_bd, true)
-      appendDataToChart(charts.loss, 0, dataTimestamp, data.loss_ct, false, true)
-      appendDataToChart(charts.loss, 1, dataTimestamp, data.loss_cu, false, true)
-      appendDataToChart(charts.loss, 2, dataTimestamp, data.loss_cm, false, true)
-      appendDataToChart(charts.loss, 3, dataTimestamp, data.loss_bd, false, true)
+      latencyTargets.value.forEach((target, index) => {
+        const measurement = getLatencyMeasurement(data, target.key)
+        appendDataToChart(charts.ping, index, dataTimestamp, measurement.rtt_ms, true)
+        appendDataToChart(charts.loss, index, dataTimestamp, measurement.loss_pct, false, true)
+      })
       appendLoadChartData(dataTimestamp, data.load_avg)
 
       lastUpdateText.value = formatTimestamp(data.last_updated)
@@ -1073,6 +1086,14 @@ watch([cpuChartRef, gpuChartRef, ramChartRef, diskChartRef, netChartRef, procCha
   if (!chartsReady.value) {
     initChartsOnMount()
   }
+})
+
+watch(latencyProfileSignature, async (nextSignature, previousSignature) => {
+  if (!previousSignature || nextSignature === previousSignature || !chartsReady.value) return
+  chartsReady.value = false
+  safeDestroyCharts()
+  await initChartsOnMount()
+  loadAllHistory(currentHours.value)
 })
 
 onMounted(() => {

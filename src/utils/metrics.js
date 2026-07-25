@@ -1,4 +1,6 @@
-export function mergeMetricsIntoServer(server, metrics) {
+import { applyLatencySnapshot } from '../fork/latencyMetrics.js';
+
+export function mergeMetricsIntoServer(server, metrics, latencySettings = null) {
   if (!metrics) return;
 
   server.cpu = metrics.cpu || 0;
@@ -20,6 +22,7 @@ export function mergeMetricsIntoServer(server, metrics) {
   server.loss_cu = metrics.loss_cu;
   server.loss_cm = metrics.loss_cm;
   server.loss_bd = metrics.loss_bd;
+  applyLatencySnapshot(server, metrics, latencySettings || server);
   server.ram_total = metrics.ram_total || 0;
   server.ram_used = metrics.ram_used || 0;
   server.swap_total = metrics.swap_total || 0;

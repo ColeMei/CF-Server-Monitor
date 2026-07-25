@@ -16,7 +16,8 @@ const server = {
   report_interval: 60,
   reset_day: 15
 };
-const expected = 'collect_interval=1&report_interval=60&reset_day=15&schema_version=2&custom_ct=&custom_cu=&custom_cm=&custom_bd=';
+const encodedTargets = 'mel:s3.ap-southeast-4.amazonaws.com:443,mys:s3.ap-southeast-5.amazonaws.com:443,tyo:s3.ap-northeast-1.amazonaws.com:443,usw:s3.us-west-2.amazonaws.com:443,cn:oss-cn-beijing.aliyuncs.com:443';
+const expected = `collect_interval=1&report_interval=60&reset_day=15&schema_version=3&latency_profile=melbourne-global-v1&latency_targets=${encodedTargets}`;
 
 const config = buildAgentConfig(server);
 assert.equal(serializeAgentConfig(config), expected);
@@ -51,35 +52,21 @@ assert.deepEqual(buildAgentConfig({}), {
   collect_interval: 0,
   report_interval: 60,
   reset_day: 1,
-  custom_ct: '',
-  custom_cu: '',
-  custom_cm: '',
-  custom_bd: '',
-  schema_version: 2
+  latency_profile: 'melbourne-global-v1',
+  latency_targets: encodedTargets,
+  schema_version: 3
 });
 
-// Test server-level ping node priority
-const serverWithCustomPing = {
-  collect_interval: 0,
-  report_interval: 60,
-  reset_day: 1,
-  custom_ct: 'ct-server.example.com',
-  custom_cu: '',
-  custom_cm: '',
-  custom_bd: ''
-};
-const settings = { custom_ct: 'ct-global.example.com', custom_cu: 'cu-global.example.com', custom_cm: 'cm-global.example.com', custom_bd: 'bd-global.example.com' };
-const resolvedConfig = buildAgentConfig(serverWithCustomPing, settings);
-assert.equal(resolvedConfig.custom_ct, 'ct-server.example.com');
-assert.equal(resolvedConfig.custom_cu, 'cu-global.example.com');
-assert.equal(resolvedConfig.custom_cm, 'cm-global.example.com');
-assert.equal(resolvedConfig.custom_bd, 'bd-global.example.com');
-assert.equal(buildAgentConfig({ custom_ct: 'gd-ct-v4.ip.zstaticcdn.com:80' }).custom_ct, 'gd-ct-v4.ip.zstaticcdn.com:80');
-assert.equal(buildAgentConfig({ custom_ct: 'GD-CT-V4.IP.ZSTATICCDN.COM:080' }).custom_ct, 'gd-ct-v4.ip.zstaticcdn.com:80');
-assert.equal(buildAgentConfig({ custom_ct: 'a'.repeat(100) }).custom_ct, '');
-assert.equal(buildAgentConfig({ custom_ct: 'gd-ct-v4.ip.zstaticcdn.com:99999' }).custom_ct, '');
-assert.equal(buildAgentConfig({ custom_ct: 'foo:bar' }).custom_ct, '');
-assert.equal(buildAgentConfig({ custom_ct: '2001:db8::1' }).custom_ct, '');
+const customProfile = buildAgentConfig({}, {
+  latency_profile: 'test-profile-v1',
+  latency_targets: JSON.stringify([
+    { key: 'lab', label: 'LAB', host: 'lab.example.com', port: 8443 }
+  ])
+});
+assert.equal(customProfile.latency_profile, 'test-profile-v1');
+assert.equal(customProfile.latency_targets, 'lab:lab.example.com:8443');
+
+// Legacy admin validation remains during the migration bridge only.
 assert.deepEqual(validatePingNode('foo:443'), { valid: true, value: 'foo:443' });
 assert.equal(validatePingNode('foo:bar').valid, false);
 assert.equal(validatePingNode('2001:db8::1').valid, false);

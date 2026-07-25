@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-AGENT_VERSION="1.3.0"
+AGENT_VERSION="1.4.0"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -218,6 +218,8 @@ while IFS='=' read -r key value; do
         WORKER_URL) WORKER_URL="${value%\"}"; WORKER_URL="${WORKER_URL#\"}" ;;
         COLLECT_INTERVAL) COLLECT_INTERVAL="${value%\"}"; COLLECT_INTERVAL="${COLLECT_INTERVAL#\"}" ;;
         REPORT_INTERVAL) REPORT_INTERVAL="${value%\"}"; REPORT_INTERVAL="${REPORT_INTERVAL#\"}" ;;
+        LATENCY_PROFILE) LATENCY_PROFILE="${value%\"}"; LATENCY_PROFILE="${LATENCY_PROFILE#\"}" ;;
+        LATENCY_TARGETS) LATENCY_TARGETS="${value%\"}"; LATENCY_TARGETS="${LATENCY_TARGETS#\"}" ;;
         CT_NODE) CT_NODE="${value%\"}"; CT_NODE="${CT_NODE#\"}" ;;
         CU_NODE) CU_NODE="${value%\"}"; CU_NODE="${CU_NODE#\"}" ;;
         CM_NODE) CM_NODE="${value%\"}"; CM_NODE="${CM_NODE#\"}" ;;
@@ -245,6 +247,8 @@ fi
 ACTIVE_INTERVAL="$REPORT_INTERVAL"
 [ "$COLLECT_INTERVAL" -gt 0 ] && ACTIVE_INTERVAL="$COLLECT_INTERVAL"
 CONFIG_MD5=${CONFIG_MD5:-none}
+LATENCY_PROFILE=${LATENCY_PROFILE:-}
+LATENCY_TARGETS=${LATENCY_TARGETS:-}
 
 log_ts() {
     date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date '+%Y-%m-%d %H:%M:%S'
@@ -294,29 +298,23 @@ persist_dynamic_config() {
         -v report="$2" \
         -v reset="$3" \
         -v md5="$4" \
-        -v ct="$5" \
-        -v cu="$6" \
-        -v cm="$7" \
-        -v bd="$8" '
-        BEGIN { c=0; r=0; p=0; d=0; m=0; tct=0; tcu=0; tcm=0; tbd=0 }
+        -v profile="$5" \
+        -v targets="$6" '
+        BEGIN { c=0; r=0; d=0; m=0; lp=0; lt=0 }
         /^COLLECT_INTERVAL=/ { print "COLLECT_INTERVAL=\"" collect "\""; c=1; next }
         /^REPORT_INTERVAL=/ { print "REPORT_INTERVAL=\"" report "\""; r=1; next }
         /^RESET_DAY=/ { print "RESET_DAY=\"" reset "\""; d=1; next }
         /^CONFIG_MD5=/ { print "CONFIG_MD5=\"" md5 "\""; m=1; next }
-        /^CT_NODE=/ { print "CT_NODE=\"" ct "\""; tct=1; next }
-        /^CU_NODE=/ { print "CU_NODE=\"" cu "\""; tcu=1; next }
-        /^CM_NODE=/ { print "CM_NODE=\"" cm "\""; tcm=1; next }
-        /^BD_NODE=/ { print "BD_NODE=\"" bd "\""; tbd=1; next }
+        /^LATENCY_PROFILE=/ { print "LATENCY_PROFILE=\"" profile "\""; lp=1; next }
+        /^LATENCY_TARGETS=/ { print "LATENCY_TARGETS=\"" targets "\""; lt=1; next }
         { print }
         END {
             if (!c) print "COLLECT_INTERVAL=\"" collect "\""
             if (!r) print "REPORT_INTERVAL=\"" report "\""
             if (!d) print "RESET_DAY=\"" reset "\""
             if (!m) print "CONFIG_MD5=\"" md5 "\""
-            if (!tct) print "CT_NODE=\"" ct "\""
-            if (!tcu) print "CU_NODE=\"" cu "\""
-            if (!tcm) print "CM_NODE=\"" cm "\""
-            if (!tbd) print "BD_NODE=\"" bd "\""
+            if (!lp) print "LATENCY_PROFILE=\"" profile "\""
+            if (!lt) print "LATENCY_TARGETS=\"" targets "\""
         }
     ' "$CONFIG_FILE" > "$tmp_file" || { rm -f "$tmp_file"; return 1; }
     chmod 600 "$tmp_file" 2>/dev/null || true
@@ -325,13 +323,13 @@ persist_dynamic_config() {
 
 apply_remote_config() {
     local response_file="$1" header_file="$2" body bytes new_md5
-    local new_collect new_report new_reset new_schema new_ct new_cu new_cm new_bd
+    local new_collect new_report new_reset new_schema new_profile new_targets
     local new_rx_corr new_tx_corr
 
     bytes=$(wc -c < "$response_file" 2>/dev/null || echo 9999)
     [ "$bytes" -le 1024 ] || return 1
     body=$(cat "$response_file" 2>/dev/null) || return 1
-    case "$body" in ''|*[!a-z0-9_=\&.\-:]*) return 1 ;; esac
+    case "$body" in ''|*[!a-z0-9_=\&.\-:,]*) return 1 ;; esac
 
     new_md5=$(awk 'tolower($1)=="x-agent-config-md5:" { gsub("\r", "", $2); print tolower($2); exit }' "$header_file")
     [ "${#new_md5}" -eq 32 ] || return 1
@@ -347,10 +345,8 @@ apply_remote_config() {
             report_interval)  new_report="$_v" ;;
             reset_day)        new_reset="$_v" ;;
             schema_version)   new_schema="$_v" ;;
-            custom_ct)        new_ct="$_v" ;;
-            custom_cu)        new_cu="$_v" ;;
-            custom_cm)        new_cm="$_v" ;;
-            custom_bd)        new_bd="$_v" ;;
+            latency_profile)  new_profile="$_v" ;;
+            latency_targets)  new_targets="$_v" ;;
             rx_correction)    new_rx_corr="$_v" ;;
             tx_correction)    new_tx_corr="$_v" ;;
         esac
@@ -359,22 +355,34 @@ apply_remote_config() {
     case "$new_collect" in 0|1|2|5|10) ;; *) return 1 ;; esac
     case "$new_report" in 30|60|120|180) ;; *) return 1 ;; esac
     case "$new_reset" in 0|[1-9]|1[0-9]|2[0-9]|30|31) ;; *) return 1 ;; esac
-    [ "$new_schema" = "2" ] || return 1
+    [ "$new_schema" = "3" ] || return 1
     [ "$new_report" -ge "$new_collect" ] || return 1
+    case "$new_profile" in ''|*[!a-z0-9_-]*) return 1 ;; esac
+    [ -n "$new_targets" ] || return 1
+    IFS=',' read -ra _targets <<< "$new_targets"
+    [ "${#_targets[@]}" -le 12 ] || return 1
+    for _target in "${_targets[@]}"; do
+        _target_key="${_target%%:*}"
+        _target_rest="${_target#*:}"
+        _target_host="${_target_rest%:*}"
+        _target_port="${_target_rest##*:}"
+        case "$_target_key" in ''|*[!a-z0-9_-]*) return 1 ;; esac
+        case "$_target_host" in ''|*[!a-z0-9.-]*) return 1 ;; esac
+        case "$_target_port" in ''|*[!0-9]*) return 1 ;; esac
+        [ "$_target_port" -ge 1 ] && [ "$_target_port" -le 65535 ] || return 1
+    done
 
     if [ "$new_md5" != "${CONFIG_MD5:-none}" ]; then
-        persist_dynamic_config "$new_collect" "$new_report" "$new_reset" "$new_md5" "$new_ct" "$new_cu" "$new_cm" "$new_bd" || return 1
+        persist_dynamic_config "$new_collect" "$new_report" "$new_reset" "$new_md5" "$new_profile" "$new_targets" || return 1
         COLLECT_INTERVAL="$new_collect"
         REPORT_INTERVAL="$new_report"
         RESET_DAY="$new_reset"
-        CT_NODE="$new_ct"
-        CU_NODE="$new_cu"
-        CM_NODE="$new_cm"
-        BD_NODE="$new_bd"
+        LATENCY_PROFILE="$new_profile"
+        LATENCY_TARGETS="$new_targets"
         CONFIG_MD5="$new_md5"
         ACTIVE_INTERVAL="$REPORT_INTERVAL"
         [ "$COLLECT_INTERVAL" -gt 0 ] && ACTIVE_INTERVAL="$COLLECT_INTERVAL"
-        log_info "Dynamic configuration applied: md5=${CONFIG_MD5} ct=${CT_NODE:-} cu=${CU_NODE:-} cm=${CM_NODE:-} bd=${BD_NODE:-}"
+        log_info "Dynamic configuration applied: md5=${CONFIG_MD5} latency_profile=${LATENCY_PROFILE} targets=${#_targets[@]}"
 
         if kill -0 "$WORKER_PID" 2>/dev/null; then
             pkill -P "$WORKER_PID" 2>/dev/null || true
@@ -776,11 +784,9 @@ get_probe() {
     echo "$avg_rtt $loss"
 }
 
-# 测试节点定义（支持参数覆盖，空值则跳过）
-CT_NODE="${CT_NODE:-}"
-CU_NODE="${CU_NODE:-}"
-CM_NODE="${CM_NODE:-}"
-BD_NODE="${BD_NODE:-}"
+# Fork latency profile is delivered by the Worker using agent config schema v3.
+LATENCY_PROFILE="${LATENCY_PROFILE:-}"
+LATENCY_TARGETS="${LATENCY_TARGETS:-}"
 
 write_probe_result() {
     local dest="$1"
@@ -801,10 +807,38 @@ write_probe_result() {
 
 # Centos限制，所以改成串行执行
 refresh_probe_async() {
-    [ -n "$CT_NODE" ] && write_probe_result /dev/shm/.cf_probe_ct get_probe "$CT_NODE" 4 443
-    [ -n "$CU_NODE" ] && write_probe_result /dev/shm/.cf_probe_cu get_probe "$CU_NODE" 4 443
-    [ -n "$CM_NODE" ] && write_probe_result /dev/shm/.cf_probe_cm get_probe "$CM_NODE" 4 443
-    [ -n "$BD_NODE" ] && write_probe_result /dev/shm/.cf_probe_bd get_probe "$BD_NODE" 4 443
+    local target key rest host port
+    IFS=',' read -ra _targets <<< "$LATENCY_TARGETS"
+    for target in "${_targets[@]}"; do
+        [ -n "$target" ] || continue
+        key="${target%%:*}"
+        rest="${target#*:}"
+        host="${rest%:*}"
+        port="${rest##*:}"
+        write_probe_result "/dev/shm/.cf_probe_latency_${key}" get_probe "$host" 4 "$port"
+    done
+}
+
+build_latency_json() {
+    local target key probe_file probe_value rtt loss json=""
+    IFS=',' read -ra _targets <<< "$LATENCY_TARGETS"
+    for target in "${_targets[@]}"; do
+        [ -n "$target" ] || continue
+        key="${target%%:*}"
+        probe_file="/dev/shm/.cf_probe_latency_${key}"
+        rtt="null"
+        loss="null"
+        if [ -f "$probe_file" ]; then
+            probe_value=$(cat "$probe_file")
+            rtt="${probe_value%% *}"
+            loss="${probe_value##* }"
+            case "$rtt" in ''|*[!0-9]*) rtt="null" ;; esac
+            case "$loss" in ''|*[!0-9]*) loss="null" ;; esac
+        fi
+        [ -n "$json" ] && json="${json},"
+        json="${json}\"${key}\":{\"rtt_ms\":${rtt},\"loss_pct\":${loss}}"
+    done
+    printf '{%s}' "$json"
 }
 
 # ==============================================================================
@@ -857,7 +891,7 @@ fi
 
 log_info "CF-Server-Monitor Probe Engine Started Successfully."
 log_debug "Config: id=${SERVER_ID} url=${WORKER_URL} report_interval=${REPORT_INTERVAL}s collect_interval=${COLLECT_INTERVAL}s active_interval=${ACTIVE_INTERVAL}s reset_day=${RESET_DAY} secret_len=${#SECRET}"
-log_debug "Nodes: ct=${CT_NODE:-} cu=${CU_NODE:-} cm=${CM_NODE:-} bd=${BD_NODE:-}"
+log_debug "Latency: profile=${LATENCY_PROFILE:-unset} targets=${LATENCY_TARGETS:-unset}"
 
 # 核心架构升级：在这里脱离主循环，静默启动常驻网络 Worker 协程，无 wait 干扰
 run_network_worker &
@@ -1013,10 +1047,7 @@ while true; do
     # ------------------ 读取共享内存 (Rename 机制下绝对无竞态) ------------------
     [ -f /dev/shm/.cf_ipv4 ] && IPV4=$(cat /dev/shm/.cf_ipv4) || IPV4="0"
     [ -f /dev/shm/.cf_ipv6 ] && IPV6=$(cat /dev/shm/.cf_ipv6) || IPV6="0"
-    if [ -f /dev/shm/.cf_probe_ct ]; then _p=$(cat /dev/shm/.cf_probe_ct); PING_CT=${_p%% *}; LOSS_CT=${_p##* }; else PING_CT=""; LOSS_CT=""; fi
-    if [ -f /dev/shm/.cf_probe_cu ]; then _p=$(cat /dev/shm/.cf_probe_cu); PING_CU=${_p%% *}; LOSS_CU=${_p##* }; else PING_CU=""; LOSS_CU=""; fi
-    if [ -f /dev/shm/.cf_probe_cm ]; then _p=$(cat /dev/shm/.cf_probe_cm); PING_CM=${_p%% *}; LOSS_CM=${_p##* }; else PING_CM=""; LOSS_CM=""; fi
-    if [ -f /dev/shm/.cf_probe_bd ]; then _p=$(cat /dev/shm/.cf_probe_bd); PING_BD=${_p%% *}; LOSS_BD=${_p##* }; else PING_BD=""; LOSS_BD=""; fi
+    LATENCY_JSON=$(build_latency_json)
 
     # 安全地构建闭合规范的 JSON 数据流
     EOS=$(escape_json "${OS}")
@@ -1024,7 +1055,7 @@ while true; do
     ECPU=$(escape_json "${CPU_INFO}")
 
     METRICS_JSON=$(cat <<EOF
-{"cpu":"$CPU","ram_total":"$RAM_TOTAL","ram_used":"$RAM_USED","swap_total":"$SWAP_TOTAL","swap_used":"$SWAP_USED","disk_total":"$DISK_TOTAL","disk_used":"$DISK_USED","load_avg":"$LOAD_AVG","boot_time":"$BOOT_TIME","net_rx":"$RX_NOW","net_tx":"$TX_NOW","net_rx_monthly":"$RX_MONTHLY","net_tx_monthly":"$TX_MONTHLY","net_in_speed":"$RX_SPEED","net_out_speed":"$TX_SPEED","os":"$EOS","arch":"$EARCH","cpu_info":"$ECPU","cpu_cores":"$CPU_CORES","gpu":$GPU,"gpu_info":$GPU_INFO_VALUE,"processes":"$PROCESSES","tcp_conn":"$TCP_CONN","udp_conn":"$UDP_CONN","ip_v4":"$IPV4","ip_v6":"$IPV6","ping_ct":"$PING_CT","ping_cu":"$PING_CU","ping_cm":"$PING_CM","ping_bd":"$PING_BD","loss_ct":"$LOSS_CT","loss_cu":"$LOSS_CU","loss_cm":"$LOSS_CM","loss_bd":"$LOSS_BD"}
+{"cpu":"$CPU","ram_total":"$RAM_TOTAL","ram_used":"$RAM_USED","swap_total":"$SWAP_TOTAL","swap_used":"$SWAP_USED","disk_total":"$DISK_TOTAL","disk_used":"$DISK_USED","load_avg":"$LOAD_AVG","boot_time":"$BOOT_TIME","net_rx":"$RX_NOW","net_tx":"$TX_NOW","net_rx_monthly":"$RX_MONTHLY","net_tx_monthly":"$TX_MONTHLY","net_in_speed":"$RX_SPEED","net_out_speed":"$TX_SPEED","os":"$EOS","arch":"$EARCH","cpu_info":"$ECPU","cpu_cores":"$CPU_CORES","gpu":$GPU,"gpu_info":$GPU_INFO_VALUE,"processes":"$PROCESSES","tcp_conn":"$TCP_CONN","udp_conn":"$UDP_CONN","ip_v4":"$IPV4","ip_v6":"$IPV6","latency_profile":"$LATENCY_PROFILE","latency":$LATENCY_JSON}
 EOF
 )
     # 上报上游数据端 (限定 4s 超时控制，主循环绝不严重漂移)
@@ -1059,7 +1090,7 @@ EOF
         REPORT_ERROR_FILE="/dev/shm/.cf_probe_error.$$"
         REPORT_HTTP_CODE=$(curl -sS -D "$REPORT_HEADER_FILE" -o "$REPORT_RESPONSE_FILE" -w "%{http_code}" -X POST \
             -H "Content-Type: application/json" \
-            -H "X-Agent-Config-Schema: 2" \
+            -H "X-Agent-Config-Schema: 3" \
             -H "X-Agent-Version: ${AGENT_VERSION}" \
             -H "X-Agent-Config-Md5: ${CONFIG_MD5:-none}" \
             -d "$PAYLOAD" -m 8 --connect-timeout 3 "$WORKER_URL" 2>"$REPORT_ERROR_FILE")
@@ -1166,6 +1197,8 @@ install_probe() {
     WORKER_URL=""
     COLLECT_INTERVAL=""
     REPORT_INTERVAL=""
+    LATENCY_PROFILE=""
+    LATENCY_TARGETS=""
     CT_NODE=""
     CU_NODE=""
     CM_NODE=""
@@ -1217,6 +1250,8 @@ SECRET="${SECRET}"
 WORKER_URL="${WORKER_URL}"
 COLLECT_INTERVAL="${COLLECT_INTERVAL}"
 REPORT_INTERVAL="${REPORT_INTERVAL}"
+LATENCY_PROFILE=""
+LATENCY_TARGETS=""
 CT_NODE="${CT_NODE:-}"
 CU_NODE="${CU_NODE:-}"
 CM_NODE="${CM_NODE:-}"
@@ -1235,6 +1270,8 @@ EOF
                     WORKER_URL) WORKER_URL="${value%\"}"; WORKER_URL="${WORKER_URL#\"}" ;;
                     COLLECT_INTERVAL) COLLECT_INTERVAL="${value%\"}"; COLLECT_INTERVAL="${COLLECT_INTERVAL#\"}" ;;
                     REPORT_INTERVAL) REPORT_INTERVAL="${value%\"}"; REPORT_INTERVAL="${REPORT_INTERVAL#\"}" ;;
+                    LATENCY_PROFILE) LATENCY_PROFILE="${value%\"}"; LATENCY_PROFILE="${LATENCY_PROFILE#\"}" ;;
+                    LATENCY_TARGETS) LATENCY_TARGETS="${value%\"}"; LATENCY_TARGETS="${LATENCY_TARGETS#\"}" ;;
                     CT_NODE) CT_NODE="${value%\"}"; CT_NODE="${CT_NODE#\"}" ;;
                     CU_NODE) CU_NODE="${value%\"}"; CU_NODE="${CU_NODE#\"}" ;;
                     CM_NODE) CM_NODE="${value%\"}"; CM_NODE="${CM_NODE#\"}" ;;
@@ -1274,6 +1311,8 @@ SECRET="${SECRET}"
 WORKER_URL="${WORKER_URL}"
 COLLECT_INTERVAL="${COLLECT_INTERVAL}"
 REPORT_INTERVAL="${REPORT_INTERVAL}"
+LATENCY_PROFILE=""
+LATENCY_TARGETS=""
 CT_NODE="${CT_NODE:-}"
 CU_NODE="${CU_NODE:-}"
 CM_NODE="${CM_NODE:-}"
@@ -1328,6 +1367,7 @@ EOF
     echo -e "    ● Worker URL  : ${WORKER_URL}"
     echo -e "    ● 上报间隔    : ${REPORT_INTERVAL}秒"
     printf  '    ● 采样间隔    : %s秒\n' "${COLLECT_INTERVAL}"
+    [ -n "${LATENCY_PROFILE}" ] && echo -e "    ● 延迟配置    : ${LATENCY_PROFILE}"
     echo -e "    ● 调试日志    : ${DEBUG_MODE}"
     [ -n "${RX_CORRECTION}" ] && echo -e "    ● 下行校正    : ${RX_CORRECTION}GB"
     [ -n "${TX_CORRECTION}" ] && echo -e "    ● 上行校正    : ${TX_CORRECTION}GB"

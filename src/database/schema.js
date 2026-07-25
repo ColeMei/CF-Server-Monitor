@@ -2,6 +2,7 @@ import { getAllServers, getLatestMetricsCache, setLatestMetricsCache, getMetrics
 import { saveSiteOptions, debug, getSettingByKey } from '../utils/settings.js';
 import { ensureServerOptimization, buildHistoryId, getServerHistoryInfo, getHistoryIdRange } from './indexOptimization.js';
 import { addHistoryColumns, ensureHistoryIndex, isHistoryOptimized } from './updateDatabase.js';
+import { latencyForStorage } from '../fork/latencyMetrics.js';
 
 let dbInitialized = false;
 
@@ -48,6 +49,8 @@ export async function initDatabase(db) {
           custom_cu TEXT DEFAULT '',
           custom_cm TEXT DEFAULT '',
           custom_bd TEXT DEFAULT '',
+          latency_profile TEXT DEFAULT '',
+          latency_targets TEXT DEFAULT '',
           rx_correction REAL DEFAULT NULL,
           tx_correction REAL DEFAULT NULL,
           offline_notify_disabled TEXT DEFAULT '0',
@@ -73,6 +76,8 @@ export async function initDatabase(db) {
           server_id TEXT NOT NULL,
           timestamp INTEGER DEFAULT 0,
           agent_version TEXT DEFAULT '',
+          latency_profile TEXT DEFAULT '',
+          latency_json TEXT DEFAULT '',
           cpu REAL DEFAULT 0,
           load_avg TEXT DEFAULT '0',
           net_in_speed REAL DEFAULT 0,
@@ -345,8 +350,9 @@ export async function weeklyCleanup(db) {
   }
 }
 
-export async function saveMetricsHistory(db, serverId, historyPartitionId, metrics, regionCode = '', timestamp = null, agentVersion = '') {
+export async function saveMetricsHistory(db, serverId, historyPartitionId, metrics, regionCode = '', timestamp = null, agentVersion = '', settings = null) {
   const historyId = buildHistoryId(historyPartitionId, timestamp);
+  const latencyStorage = latencyForStorage(metrics, settings);
   const rawTimestamp = Number(timestamp);
   const now = Number.isFinite(rawTimestamp) && rawTimestamp > 0
     ? (rawTimestamp < 10000000000 ? rawTimestamp * 1000 : rawTimestamp)
@@ -368,7 +374,7 @@ export async function saveMetricsHistory(db, serverId, historyPartitionId, metri
   const insertHistoryRow = async () => {
     await db.prepare(`
     INSERT INTO metrics_history (
-      id, server_id, timestamp, agent_version, cpu, load_avg,
+      id, server_id, timestamp, agent_version, latency_profile, latency_json, cpu, load_avg,
       net_in_speed, net_out_speed, net_rx, net_tx,
       processes, tcp_conn, udp_conn,
       ping_ct, ping_cu, ping_cm, ping_bd,
@@ -378,7 +384,7 @@ export async function saveMetricsHistory(db, serverId, historyPartitionId, metri
       cpu_cores, cpu_info, gpu, gpu_info, arch, os, region, ip_v4, ip_v6, boot_time,
       net_rx_monthly, net_tx_monthly
     ) VALUES (
-      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?, ?,
@@ -393,6 +399,8 @@ export async function saveMetricsHistory(db, serverId, historyPartitionId, metri
     serverId,
     now,
     agentVersion || '',
+    latencyStorage.profileId,
+    latencyStorage.latencyJson,
     parseFloat(metrics.cpu) || 0,
     metrics.load || metrics.load_avg || '0 0 0',
     parseFloat(metrics.net_in_speed) || 0,

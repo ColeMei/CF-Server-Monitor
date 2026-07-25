@@ -74,21 +74,11 @@
       </div>
     </div>
     <div class="ping-panel">
-      <div class="ping-item">
-        <span class="ping-label">CT</span>
-        <span class="ping-value" :style="{ color: getPingColor(server.ping_ct) }">{{ !isPingValid(server.ping_ct) ? trans.timeout : server.ping_ct + 'ms' }}</span>
-      </div>
-      <div class="ping-item">
-        <span class="ping-label">CU</span>
-        <span class="ping-value" :style="{ color: getPingColor(server.ping_cu) }">{{ !isPingValid(server.ping_cu) ? trans.timeout : server.ping_cu + 'ms' }}</span>
-      </div>
-      <div class="ping-item">
-        <span class="ping-label">CM</span>
-        <span class="ping-value" :style="{ color: getPingColor(server.ping_cm) }">{{ !isPingValid(server.ping_cm) ? trans.timeout : server.ping_cm + 'ms' }}</span>
-      </div>
-      <div class="ping-item">
-        <span class="ping-label">BD</span>
-        <span class="ping-value" :style="{ color: getPingColor(server.ping_bd) }">{{ !isPingValid(server.ping_bd) ? trans.timeout : server.ping_bd + 'ms' }}</span>
+      <div v-for="target in latencyTargets" :key="target.key" class="ping-item" :title="target.description || target.host || target.label">
+        <span class="ping-label">{{ target.label }}</span>
+        <span class="ping-value" :style="{ color: getPingColor(latencyRtt(target.key)) }">
+          {{ !isLatencyRttValid(latencyRtt(target.key)) ? trans.timeout : latencyRtt(target.key) + 'ms' }}
+        </span>
       </div>
     </div>
   </router-link>
@@ -102,6 +92,11 @@ import { getPublicAssetUrl } from '../utils/config'
 import { useTranslation } from '../utils/i18n'
 import { PING } from '../utils/constants'
 import { normalizeTimestamp, formatDateTime } from '../utils/time.js'
+import {
+  getLatencyMeasurement,
+  getLatencyTargets,
+  isLatencyRttValid
+} from '../fork/latency.js'
 
 const props = defineProps({
   server: {
@@ -124,6 +119,8 @@ const props = defineProps({
 })
 
 const trans = useTranslation()
+const latencyTargets = computed(() => getLatencyTargets(props.server))
+const latencyRtt = (targetKey) => getLatencyMeasurement(props.server, targetKey).rtt_ms
 
 const currentTime = computed(() => {
   const ts = Number(props.server.current_timestamp)
@@ -196,16 +193,8 @@ const expireText = computed(() => {
   return days > 0 ? `${days}${trans.value.expireDays}` : trans.value.expired
 })
 
-const isPingValid = (ping) => {
-  if (ping === null || ping === undefined || ping === '' || ping === '0') {
-    return false
-  }
-  const val = parseInt(ping)
-  return val > 0
-}
-
 const getPingColor = (ping) => {
-  if (!isPingValid(ping)) return 'var(--accent-red)'
+  if (!isLatencyRttValid(ping)) return 'var(--accent-red)'
   const val = parseInt(ping)
   if (val < PING.GOOD_THRESHOLD) return 'var(--accent-green)'
   if (val < PING.WARNING_THRESHOLD) return 'var(--accent-yellow)'
