@@ -34,3 +34,13 @@ jobs:
 
       - name: Test agent configuration
         run: npm run test:agent-config
+
+      - name: Test fork contract
+        run: npm run test:fork
+
+      - name: Validate installer shells
+        run: |
+          bash -n public/install.sh
+          awk '/^    cat << '\''PROBE_EOF'\''/{capture=1; next} capture && /^PROBE_EOF$/{exit} capture{print}' public/install.sh \
+            | sed 's/__AGENT_VERSION__/1.4.0/g' \
+            | bash -n
