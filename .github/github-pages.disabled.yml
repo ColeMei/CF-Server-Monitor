@@ -1,3 +1,7 @@
+# Disabled in the ColeMei fork.
+#
+# This deployment is not part of the production Cloudflare Worker workflow.
+# Keep it outside .github/workflows so pushes to main cannot publish a second site.
 name: Deploy to GitHub Pages
 
 on:

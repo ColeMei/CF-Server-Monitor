@@ -1,3 +1,8 @@
+# Disabled in the ColeMei fork.
+#
+# This upstream workflow writes upstream/main directly to the production main
+# branch. Keep it outside .github/workflows so upstream updates are reviewed
+# and tested before they can reach production.
 name: Upstream Sync
 
 permissions:
