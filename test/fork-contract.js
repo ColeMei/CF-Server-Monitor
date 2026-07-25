@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
+import { findOSConfig } from '../src/frontend/utils/osIcon.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = async (path) => readFile(resolve(repoRoot, path), 'utf8');
@@ -29,6 +30,13 @@ assert.doesNotMatch(agentConfig, /`&custom_(ct|cu|cm|bd)=/);
 const schema = await read('src/database/schema.js');
 assert.match(schema, /latency_profile TEXT DEFAULT ''/);
 assert.match(schema, /latency_json TEXT DEFAULT ''/);
+
+assert.deepEqual(findOSConfig('Oracle Linux Server 9.7 / aarch64'), {
+  name: 'Oracle Linux',
+  image: 'os-oracle.svg',
+  keywords: ['oracle linux', 'oraclelinux']
+});
+assert.match(await read('public/os-icons/os-oracle.svg'), /<title>Oracle Linux<\/title>/);
 
 const latencyMetrics = await read('src/fork/latencyMetrics.js');
 assert.doesNotMatch(latencyMetrics, /legacyLatencyAdapter|allowLegacy|readLegacyLatency/);

@@ -37,6 +37,11 @@ const osConfigs = [
     keywords: ['windows', 'win32', 'win64', 'win10', 'win11', 'win server', 'microsoft']
   },
   {
+    name: 'Oracle Linux',
+    image: 'os-oracle.svg',
+    keywords: ['oracle linux', 'oraclelinux']
+  },
+  {
     name: 'Arch Linux',
     image: 'os-arch.svg',
     keywords: ['arch', 'archlinux', 'arch linux']
