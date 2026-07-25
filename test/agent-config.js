@@ -6,8 +6,7 @@ import {
   isValidTrafficCorrection,
   serializeAgentConfig,
   serializeCorrection,
-  validateAgentConfigInput,
-  validatePingNode
+  validateAgentConfigInput
 } from '../src/utils/agentConfig.js';
 import { md5Hash } from '../src/utils/common.js';
 
@@ -65,10 +64,5 @@ const customProfile = buildAgentConfig({}, {
 });
 assert.equal(customProfile.latency_profile, 'test-profile-v1');
 assert.equal(customProfile.latency_targets, 'lab:lab.example.com:8443');
-
-// Legacy admin validation remains during the migration bridge only.
-assert.deepEqual(validatePingNode('foo:443'), { valid: true, value: 'foo:443' });
-assert.equal(validatePingNode('foo:bar').valid, false);
-assert.equal(validatePingNode('2001:db8::1').valid, false);
 
 console.log('agent config tests passed');

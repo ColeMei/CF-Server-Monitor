@@ -31,23 +31,28 @@ assert.match(schema, /latency_profile TEXT DEFAULT ''/);
 assert.match(schema, /latency_json TEXT DEFAULT ''/);
 
 const latencyMetrics = await read('src/fork/latencyMetrics.js');
-assert.match(latencyMetrics, /from '\.\/legacyLatencyAdapter\.js'/);
-assert.match(latencyMetrics, /allowLegacy \? readLegacyLatency\(record\) : null/);
+assert.doesNotMatch(latencyMetrics, /legacyLatencyAdapter|allowLegacy|readLegacyLatency/);
 
 for (const path of [
+  'public/install.sh',
   'src/database/schema.js',
+  'src/database/updateDatabase.js',
+  'src/handlers/admin.js',
   'src/index.js',
   'src/utils/metrics.js',
   'src/utils/agentConfig.js',
-  'src/utils/settings.js'
+  'src/utils/settings.js',
+  'src/frontend/views/admin/index.vue',
+  'src/frontend/views/admin/components/CopyCommandModal.vue',
+  'src/frontend/views/admin/components/EditServerModal.vue',
+  'src/frontend/views/admin/components/SettingsPanel.vue'
 ]) {
   const source = await read(path);
   assert.doesNotMatch(
     source,
-    /legacyLatencyAdapter/,
-    `${path} bypasses the removable legacy adapter boundary`
+    /legacyLatencyAdapter|allowLegacy|custom_(ct|cu|cm|bd)|ping_(ct|cu|cm|bd)|loss_(ct|cu|cm|bd)|\b(CT|CU|CM|BD)_NODE\b/,
+    `${path} retains the retired CT/CU/CM/BD latency contract`
   );
 }
 
 console.log('fork boundary contract tests passed');
-

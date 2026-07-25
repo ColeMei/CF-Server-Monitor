@@ -220,10 +220,6 @@ while IFS='=' read -r key value; do
         REPORT_INTERVAL) REPORT_INTERVAL="${value%\"}"; REPORT_INTERVAL="${REPORT_INTERVAL#\"}" ;;
         LATENCY_PROFILE) LATENCY_PROFILE="${value%\"}"; LATENCY_PROFILE="${LATENCY_PROFILE#\"}" ;;
         LATENCY_TARGETS) LATENCY_TARGETS="${value%\"}"; LATENCY_TARGETS="${LATENCY_TARGETS#\"}" ;;
-        CT_NODE) CT_NODE="${value%\"}"; CT_NODE="${CT_NODE#\"}" ;;
-        CU_NODE) CU_NODE="${value%\"}"; CU_NODE="${CU_NODE#\"}" ;;
-        CM_NODE) CM_NODE="${value%\"}"; CM_NODE="${CM_NODE#\"}" ;;
-        BD_NODE) BD_NODE="${value%\"}"; BD_NODE="${BD_NODE#\"}" ;;
         RESET_DAY) RESET_DAY="${value%\"}"; RESET_DAY="${RESET_DAY#\"}" ;;
         DEBUG_MODE) DEBUG_MODE="${value%\"}"; DEBUG_MODE="${DEBUG_MODE#\"}" ;;
         CONFIG_MD5) CONFIG_MD5="${value%\"}"; CONFIG_MD5="${CONFIG_MD5#\"}" ;;
@@ -1199,10 +1195,6 @@ install_probe() {
     REPORT_INTERVAL=""
     LATENCY_PROFILE=""
     LATENCY_TARGETS=""
-    CT_NODE=""
-    CU_NODE=""
-    CM_NODE=""
-    BD_NODE=""
     RESET_DAY=""
     RX_CORRECTION=""
     TX_CORRECTION=""
@@ -1216,10 +1208,6 @@ install_probe() {
             -url=*) WORKER_URL="${arg#-url=}" ;;
             -collect_interval=*|-collect=*) COLLECT_INTERVAL="${arg#*=}" ;;
             -interval=*) REPORT_INTERVAL="${arg#-interval=}" ;;
-            -ct=*) CT_NODE="${arg#-ct=}" ;;
-            -cu=*) CU_NODE="${arg#-cu=}" ;;
-            -cm=*) CM_NODE="${arg#-cm=}" ;;
-            -bd=*) BD_NODE="${arg#-bd=}" ;;
             -reset_day=*) RESET_DAY="${arg#-reset_day=}" ;;
             -rx_correction=*) RX_CORRECTION="${arg#-rx_correction=}" ;;
             -tx_correction=*) TX_CORRECTION="${arg#-tx_correction=}" ;;
@@ -1252,10 +1240,6 @@ COLLECT_INTERVAL="${COLLECT_INTERVAL}"
 REPORT_INTERVAL="${REPORT_INTERVAL}"
 LATENCY_PROFILE=""
 LATENCY_TARGETS=""
-CT_NODE="${CT_NODE:-}"
-CU_NODE="${CU_NODE:-}"
-CM_NODE="${CM_NODE:-}"
-BD_NODE="${BD_NODE:-}"
 RESET_DAY="${RESET_DAY}"
 CONFIG_MD5="none"
 EOF
@@ -1272,10 +1256,6 @@ EOF
                     REPORT_INTERVAL) REPORT_INTERVAL="${value%\"}"; REPORT_INTERVAL="${REPORT_INTERVAL#\"}" ;;
                     LATENCY_PROFILE) LATENCY_PROFILE="${value%\"}"; LATENCY_PROFILE="${LATENCY_PROFILE#\"}" ;;
                     LATENCY_TARGETS) LATENCY_TARGETS="${value%\"}"; LATENCY_TARGETS="${LATENCY_TARGETS#\"}" ;;
-                    CT_NODE) CT_NODE="${value%\"}"; CT_NODE="${CT_NODE#\"}" ;;
-                    CU_NODE) CU_NODE="${value%\"}"; CU_NODE="${CU_NODE#\"}" ;;
-                    CM_NODE) CM_NODE="${value%\"}"; CM_NODE="${CM_NODE#\"}" ;;
-                    BD_NODE) BD_NODE="${value%\"}"; BD_NODE="${BD_NODE#\"}" ;;
                     RESET_DAY) RESET_DAY="${value%\"}"; RESET_DAY="${RESET_DAY#\"}" ;;
                     CONFIG_MD5) CONFIG_MD5="${value%\"}"; CONFIG_MD5="${CONFIG_MD5#\"}" ;;
                 esac
@@ -1313,10 +1293,6 @@ COLLECT_INTERVAL="${COLLECT_INTERVAL}"
 REPORT_INTERVAL="${REPORT_INTERVAL}"
 LATENCY_PROFILE=""
 LATENCY_TARGETS=""
-CT_NODE="${CT_NODE:-}"
-CU_NODE="${CU_NODE:-}"
-CM_NODE="${CM_NODE:-}"
-BD_NODE="${BD_NODE:-}"
 RESET_DAY="${RESET_DAY}"
 CONFIG_MD5="none"
 EOF
@@ -1376,10 +1352,6 @@ EOF
     else
         echo -e "    ● 流量重置日  : ${RESET_DAY}号"
     fi
-    [ -n "${CT_NODE}" ] && echo -e "    ● CT节点      : ${CT_NODE}"
-    [ -n "${CU_NODE}" ] && echo -e "    ● CU节点      : ${CU_NODE}"
-    [ -n "${CM_NODE}" ] && echo -e "    ● CM节点      : ${CM_NODE}"
-    [ -n "${BD_NODE}" ] && echo -e "    ● BD节点      : ${BD_NODE}"
     if [ "$RUNTIME_MODE" = "systemd" ]; then
         echo -e "  管理指令 :"
         echo -e "    ● 查看实时日志 : journalctl -u ${SERVICE_NAME} -f"

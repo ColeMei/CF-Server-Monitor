@@ -6,7 +6,7 @@ deploys only reviewed commits from this fork's `main`.
 ## Ownership boundary
 
 - `src/fork/` owns backend latency profiles, schema-v3 normalization, and the
-  temporary legacy adapter.
+  schema-v3 latency contract.
 - `src/frontend/fork/` owns frontend latency helpers.
 - `test/fork-*.js` protects the fork contract and the small hooks in upstream
   files.
@@ -25,10 +25,14 @@ or carrier-average measurement.
 - History storage: `latency_profile` plus `latency_json`
 - UI: target metadata drives labels and datasets; no fixed regional columns
 
-The migration bridge accepts v1.3 reports through
-`src/fork/legacyLatencyAdapter.js`. It never writes legacy CT/CU/CM/BD values
-into the schema-v3 columns. Delete the adapter and legacy columns/hooks after
-all probes run schema v3.
+The production contract has no CT/CU/CM/BD compatibility fields or adapter.
+Agents may make one unprofiled bootstrap report before applying dynamic
+configuration; subsequent reports use schema v3.
+
+The fork's production-supported probe is the standard Linux/systemd agent in
+`public/install.sh`. The retained upstream Alpine, OpenWrt, macOS, and Windows
+installers have not yet been ported to this fork's latency contract and must not
+be offered or deployed until they are migrated and covered by the same tests.
 
 ## Upstream sync
 
@@ -39,9 +43,8 @@ all probes run schema v3.
    reapply the small fork hooks.
 4. Run `npm run test:agent-config`, `npm run test:fork`, shell syntax checks for
    both installer and embedded agent, and `npm run build:frontend`.
-5. Deploy to the isolated staging Worker/D1 and send both a legacy report and a
-   schema-v3 report before any production change.
+5. Deploy to the isolated staging Worker/D1 and validate bootstrap plus
+   schema-v3 reports before any production change.
 
 Never resolve `public/install.sh` with an unconditional `--ours`: upstream
 agent fixes must be reviewed and retained where they do not violate schema v3.
-

@@ -306,10 +306,14 @@ function buildMockMetrics() {
     processes: 128,
     tcp_conn: 32,
     udp_conn: 8,
-    ping_ct: 30,
-    ping_cu: 40,
-    ping_cm: 50,
-    ping_bd: 60,
+    latency_profile: 'melbourne-global-v1',
+    latency: {
+      mel: { rtt_ms: 30, loss_pct: 0 },
+      mys: { rtt_ms: 40, loss_pct: 0 },
+      tyo: { rtt_ms: 50, loss_pct: 0 },
+      usw: { rtt_ms: 60, loss_pct: 0 },
+      cn: { rtt_ms: 80, loss_pct: 0 }
+    },
     ram_total: 8192,
     ram_used: 3735,
     swap_total: 1024,

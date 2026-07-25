@@ -45,10 +45,6 @@ export async function initDatabase(db) {
           reset_day INTEGER DEFAULT 1,
           collect_interval INTEGER DEFAULT 0,
           report_interval INTEGER DEFAULT 60,
-          custom_ct TEXT DEFAULT '',
-          custom_cu TEXT DEFAULT '',
-          custom_cm TEXT DEFAULT '',
-          custom_bd TEXT DEFAULT '',
           latency_profile TEXT DEFAULT '',
           latency_targets TEXT DEFAULT '',
           rx_correction REAL DEFAULT NULL,
@@ -87,14 +83,6 @@ export async function initDatabase(db) {
           processes INTEGER DEFAULT 0,
           tcp_conn INTEGER DEFAULT 0,
           udp_conn INTEGER DEFAULT 0,
-          ping_ct INTEGER DEFAULT 0,
-          ping_cu INTEGER DEFAULT 0,
-          ping_cm INTEGER DEFAULT 0,
-          ping_bd INTEGER DEFAULT 0,
-          loss_ct INTEGER DEFAULT NULL,
-          loss_cu INTEGER DEFAULT NULL,
-          loss_cm INTEGER DEFAULT NULL,
-          loss_bd INTEGER DEFAULT NULL,
           ram_total REAL DEFAULT 0,
           ram_used REAL DEFAULT 0,
           swap_total REAL DEFAULT 0,
@@ -358,27 +346,12 @@ export async function saveMetricsHistory(db, serverId, historyPartitionId, metri
     ? (rawTimestamp < 10000000000 ? rawTimestamp * 1000 : rawTimestamp)
     : Date.now();
 
-  const parsePing = (val) => {
-    if (val === '' || val === null || val === undefined) return null;
-    const num = parseInt(val);
-    return (num > 0) ? num : null;
-  };
-
-  const parseLoss = (val) => {
-    if (val === '' || val === null || val === undefined) return null;
-    const num = parseInt(val);
-    if (Number.isNaN(num)) return null;
-    return Math.max(0, Math.min(100, num));
-  };
-
   const insertHistoryRow = async () => {
     await db.prepare(`
     INSERT INTO metrics_history (
       id, server_id, timestamp, agent_version, latency_profile, latency_json, cpu, load_avg,
       net_in_speed, net_out_speed, net_rx, net_tx,
       processes, tcp_conn, udp_conn,
-      ping_ct, ping_cu, ping_cm, ping_bd,
-      loss_ct, loss_cu, loss_cm, loss_bd,
       ram_total, ram_used, swap_total, swap_used,
       disk_total, disk_used,
       cpu_cores, cpu_info, gpu, gpu_info, arch, os, region, ip_v4, ip_v6, boot_time,
@@ -387,8 +360,6 @@ export async function saveMetricsHistory(db, serverId, historyPartitionId, metri
       ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?, ?, ?,
       ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
@@ -410,14 +381,6 @@ export async function saveMetricsHistory(db, serverId, historyPartitionId, metri
     parseInt(metrics.processes) || 0,
     parseInt(metrics.tcp_conn) || 0,
     parseInt(metrics.udp_conn) || 0,
-    parsePing(metrics.ping_ct),
-    parsePing(metrics.ping_cu),
-    parsePing(metrics.ping_cm),
-    parsePing(metrics.ping_bd),
-    parseLoss(metrics.loss_ct),
-    parseLoss(metrics.loss_cu),
-    parseLoss(metrics.loss_cm),
-    parseLoss(metrics.loss_bd),
     parseFloat(metrics.ram_total) || 0,
     parseFloat(metrics.ram_used) || 0,
     parseFloat(metrics.swap_total) || 0,

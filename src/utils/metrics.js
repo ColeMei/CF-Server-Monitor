@@ -14,14 +14,6 @@ export function mergeMetricsIntoServer(server, metrics, latencySettings = null) 
   server.processes = metrics.processes || 0;
   server.tcp_conn = metrics.tcp_conn || 0;
   server.udp_conn = metrics.udp_conn || 0;
-  server.ping_ct = metrics.ping_ct;
-  server.ping_cu = metrics.ping_cu;
-  server.ping_cm = metrics.ping_cm;
-  server.ping_bd = metrics.ping_bd;
-  server.loss_ct = metrics.loss_ct;
-  server.loss_cu = metrics.loss_cu;
-  server.loss_cm = metrics.loss_cm;
-  server.loss_bd = metrics.loss_bd;
   applyLatencySnapshot(server, metrics, latencySettings || server);
   server.ram_total = metrics.ram_total || 0;
   server.ram_used = metrics.ram_used || 0;

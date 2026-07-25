@@ -152,7 +152,6 @@
         :show="showEditModal"
         v-model:edit-form="editForm"
         :current-server-name="currentServerName"
-        :settings="settings"
         @save="saveEdit"
         @close="closeEditModal"
       />
@@ -175,13 +174,8 @@
         :trans="trans"
         :show="showCopyModal"
         :current-server-name="currentServerName"
-        :target-os="targetOs"
         :collect-interval="collectInterval"
         :report-interval="reportInterval"
-        :custom-ct="customCt"
-        :custom-cu="customCu"
-        :custom-cm="customCm"
-        :custom-bd="customBd"
         :reset-day="resetDay"
         :rx-correction="rxCorrection"
         :tx-correction="txCorrection"
@@ -189,7 +183,6 @@
         :copied-cmd="copiedCmd"
         @close="closeCopyModal"
         @copy-cmd="copyCustomCmd"
-        @update:target-os="targetOs = $event"
         @open-edit-from-copy="openEditModalFromCopy"
       />
 
@@ -421,7 +414,6 @@ import CopyCommandModal from './components/CopyCommandModal.vue'
 import { adminApi, login, logout as apiLogout, upgradeDatabase, clearHistory, getApiBases, fetchConfig } from '../../utils/api'
 import { hasMultipleApiBases } from '../../utils/config.js'
 import { t, useTranslation } from '../../utils/i18n'
-import { PING_NODE_FIELDS, validatePingNode } from '../../utils/pingNode.js'
 import { usePasswordVisibility } from '../../composables/usePasswordVisibility'
 import { useTurnstile } from './composables/useTurnstile'
 
@@ -506,10 +498,6 @@ const settings = ref({
   username: '',
   password: '',
   confirm_password: '',
-  custom_ct: '',
-  custom_cu: '',
-  custom_cm: '',
-  custom_bd: '',
   csp_static: '',
   csp_api: ''
 })
@@ -553,10 +541,6 @@ const editForm = ref({
   reset_day: 1,
   collect_interval: 0,
   report_interval: 60,
-  custom_ct: '',
-  custom_cu: '',
-  custom_cm: '',
-  custom_bd: '',
   rx_correction: '',
   tx_correction: '',
   is_hidden: false,
@@ -590,38 +574,12 @@ const settingsPanelRef = ref(null)
 const showCopyModal = ref(false)
 const copyServerId = ref('')
 const currentServerName = ref('')
-const targetOs = ref('linux')
 const collectInterval = ref(0)
 const reportInterval = ref(60)
-const customCt = ref('')
-const customCu = ref('')
-const customCm = ref('')
-const customBd = ref('')
 const resetDay = ref(1)
 const rxCorrection = ref('')
 const txCorrection = ref('')
 const copiedCmd = ref(false)
-
-const getPingNodeLabel = (field) => ({
-  custom_ct: trans.value.customCt,
-  custom_cu: trans.value.customCu,
-  custom_cm: trans.value.customCm,
-  custom_bd: trans.value.customBd
-})[field] || field
-
-const getPingNodeValidation = (source) => {
-  const values = {}
-  for (const field of PING_NODE_FIELDS) {
-    const result = validatePingNode(source[field])
-    if (!result.valid) {
-      return { valid: false, field }
-    }
-    values[field] = result.value
-  }
-  return { valid: true, values }
-}
-
-const buildPingNodeError = (field) => `${getPingNodeLabel(field)}: ${trans.value.invalidPingNodeFormat}`
 
 const copyTextToClipboard = async (text) => {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -813,10 +771,6 @@ const loadSettings = async () => {
         username: settingsData.username || '',
         password: '',
         confirm_password: '',
-        custom_ct: settingsData.custom_ct || '',
-        custom_cu: settingsData.custom_cu || '',
-        custom_cm: settingsData.custom_cm || '',
-        custom_bd: settingsData.custom_bd || '',
         csp_static: settingsData.csp_static || '',
         csp_api: settingsData.csp_api || ''
       }
@@ -879,12 +833,6 @@ const saveSettings = async () => {
     }
   }
 
-  const pingNodeValidation = getPingNodeValidation(settings.value)
-  if (!pingNodeValidation.valid) {
-    validationError.value = buildPingNodeError(pingNodeValidation.field)
-    return
-  }
-
   if (settingsPanelRef.value) {
     const cspStaticValid = settingsPanelRef.value.validateCspField('csp_static')
     const cspApiValid = settingsPanelRef.value.validateCspField('csp_api')
@@ -920,10 +868,6 @@ const saveSettings = async () => {
       cloudflare_account_id: settings.value.cloudflare_account_id,
       cloudflare_token: settings.value.cloudflare_token,
       username: settings.value.username,
-      custom_ct: pingNodeValidation.values.custom_ct,
-      custom_cu: pingNodeValidation.values.custom_cu,
-      custom_cm: pingNodeValidation.values.custom_cm,
-      custom_bd: pingNodeValidation.values.custom_bd,
       csp_static: settings.value.csp_static || '',
       csp_api: settings.value.csp_api || ''
     }
@@ -1023,13 +967,8 @@ const copyCmd = (serverId) => {
   const server = servers.value.find(s => s.id === serverId)
   copyServerId.value = serverId
   currentServerName.value = server?.name || ''
-  targetOs.value = 'linux'
   collectInterval.value = server?.collect_interval ?? 0
   reportInterval.value = server?.report_interval || 60
-  customCt.value = server?.custom_ct || settings.value.custom_ct
-  customCu.value = server?.custom_cu || settings.value.custom_cu
-  customCm.value = server?.custom_cm || settings.value.custom_cm
-  customBd.value = server?.custom_bd || settings.value.custom_bd
   resetDay.value = server?.reset_day ?? 1
   rxCorrection.value = server?.rx_correction ?? ''
   txCorrection.value = server?.tx_correction ?? ''
@@ -1041,35 +980,7 @@ const hasCorrectionValue = (value) => value !== null && value !== undefined && v
 
 const getCustomInstallCommand = () => {
   const HOST = selectedApiBase.value
-  if (targetOs.value === 'windows') {
-    const params = [
-      'install',
-      `-Id '${copyServerId.value}'`,
-      `-Secret '${apiSecret.value}'`,
-      `-Url '${HOST}/update'`,
-      `-CollectInterval ${collectInterval.value}`,
-      `-ReportInterval ${reportInterval.value}`,
-      `-ResetDay ${resetDay.value ?? 1}`
-    ]
-    if (customCt.value) params.push(`-CtNode '${customCt.value}'`)
-    if (customCu.value) params.push(`-CuNode '${customCu.value}'`)
-    if (customCm.value) params.push(`-CmNode '${customCm.value}'`)
-    if (customBd.value) params.push(`-BdNode '${customBd.value}'`)
-    if (hasCorrectionValue(rxCorrection.value)) params.push(`-RxCorrection ${rxCorrection.value}`)
-    if (hasCorrectionValue(txCorrection.value)) params.push(`-TxCorrection ${txCorrection.value}`)
-    return `irm ${HOST}/cf-server-monitor.ps1 -OutFile cf-server-monitor.ps1; powershell -ExecutionPolicy Bypass -File .\\cf-server-monitor.ps1 ${params.join(' ')}`
-  }
-  const shell = targetOs.value === 'alpine' || targetOs.value === 'openwrt' ? 'sh' : 'bash'
-  const sudoPrefix = targetOs.value === 'mac' ? 'sudo ' : ''
-  const script = targetOs.value === 'alpine' ? 'install-alpine.sh'
-    : targetOs.value === 'openwrt' ? 'install-openwrt.sh'
-    : targetOs.value === 'mac' ? 'install-mac.sh'
-    : 'install.sh'
-  let cmd = `curl -sL ${HOST}/${script} | ${sudoPrefix}${shell} -s install -id=${copyServerId.value} -secret='${apiSecret.value}' -url=${HOST}/update -collect_interval=${collectInterval.value} -interval=${reportInterval.value} -reset_day=${resetDay.value ?? 1}`
-  if (customCt.value) cmd += ` -ct=${customCt.value}`
-  if (customCu.value) cmd += ` -cu=${customCu.value}`
-  if (customCm.value) cmd += ` -cm=${customCm.value}`
-  if (customBd.value) cmd += ` -bd=${customBd.value}`
+  let cmd = `curl -sL ${HOST}/install.sh | bash -s install -id=${copyServerId.value} -secret='${apiSecret.value}' -url=${HOST}/update -collect_interval=${collectInterval.value} -interval=${reportInterval.value} -reset_day=${resetDay.value ?? 1}`
   if (hasCorrectionValue(rxCorrection.value)) cmd += ` -rx_correction=${rxCorrection.value}`
   if (hasCorrectionValue(txCorrection.value)) cmd += ` -tx_correction=${txCorrection.value}`
   return cmd
@@ -1129,10 +1040,6 @@ const openEditModal = (server) => {
     reset_day: server.reset_day ?? 1,
     collect_interval: server.collect_interval ?? 0,
     report_interval: server.report_interval || 60,
-    custom_ct: server.custom_ct || '',
-    custom_cu: server.custom_cu || '',
-    custom_cm: server.custom_cm || '',
-    custom_bd: server.custom_bd || '',
     rx_correction: server.rx_correction ?? '',
     tx_correction: server.tx_correction ?? '',
     is_hidden: server.is_hidden === '1',
@@ -1149,12 +1056,6 @@ const closeEditModal = () => {
 const saveEdit = async () => {
   validationError.value = null
 
-  const pingNodeValidation = getPingNodeValidation(editForm.value)
-  if (!pingNodeValidation.valid) {
-    validationError.value = buildPingNodeError(pingNodeValidation.field)
-    return
-  }
-
   const data = {
     action: 'edit',
     id: editForm.value.id,
@@ -1169,10 +1070,6 @@ const saveEdit = async () => {
     reset_day: editForm.value.reset_day,
     collect_interval: editForm.value.collect_interval,
     report_interval: editForm.value.report_interval,
-    custom_ct: pingNodeValidation.values.custom_ct,
-    custom_cu: pingNodeValidation.values.custom_cu,
-    custom_cm: pingNodeValidation.values.custom_cm,
-    custom_bd: pingNodeValidation.values.custom_bd,
     rx_correction: editForm.value.rx_correction,
     tx_correction: editForm.value.tx_correction,
     is_hidden: editForm.value.is_hidden ? '1' : '0',

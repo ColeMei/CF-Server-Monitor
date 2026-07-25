@@ -1,5 +1,4 @@
 import { resolveLatencyProfile } from './latencyProfile.js';
-import { readLegacyLatency } from './legacyLatencyAdapter.js';
 
 function normalizeRtt(value) {
   if (value === '' || value === null || value === undefined) return null;
@@ -63,7 +62,7 @@ export function latencyForStorage(metrics, settings = null) {
   };
 }
 
-export function readLatencySnapshot(record, settings = null, allowLegacy = true) {
+export function readLatencySnapshot(record, settings = null) {
   if (!record || typeof record !== 'object') return null;
 
   const profile = resolveLatencyProfile(settings);
@@ -81,12 +80,12 @@ export function readLatencySnapshot(record, settings = null, allowLegacy = true)
     };
   }
 
-  return allowLegacy ? readLegacyLatency(record) : null;
+  return null;
 }
 
-export function decorateLatencyRecord(record, settings = null, allowLegacy = true) {
+export function decorateLatencyRecord(record, settings = null) {
   if (!record || typeof record !== 'object') return record;
-  const snapshot = readLatencySnapshot(record, settings, allowLegacy);
+  const snapshot = readLatencySnapshot(record, settings);
   if (!snapshot) return record;
   const decorated = {
     ...record,
@@ -98,8 +97,8 @@ export function decorateLatencyRecord(record, settings = null, allowLegacy = tru
   return decorated;
 }
 
-export function applyLatencySnapshot(target, record, settings = null, allowLegacy = true) {
-  const snapshot = readLatencySnapshot(record, settings || target, allowLegacy);
+export function applyLatencySnapshot(target, record, settings = null) {
+  const snapshot = readLatencySnapshot(record, settings || target);
   if (!snapshot) return;
   target.latency_profile = snapshot.profileId;
   target.latency_targets = snapshot.targets;

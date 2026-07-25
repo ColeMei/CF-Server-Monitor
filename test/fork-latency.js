@@ -7,11 +7,7 @@ import {
   normalizeLatencyTargets,
   resolveLatencyProfile
 } from '../src/fork/latencyProfile.js';
-import {
-  decorateLatencyRecord,
-  latencyForStorage,
-  readLatencySnapshot
-} from '../src/fork/latencyMetrics.js';
+import { latencyForStorage, readLatencySnapshot } from '../src/fork/latencyMetrics.js';
 
 assert.equal(DEFAULT_LATENCY_PROFILE_ID, 'melbourne-global-v1');
 assert.deepEqual(DEFAULT_LATENCY_TARGETS.map(target => target.key), ['mel', 'mys', 'tyo', 'usw', 'cn']);
@@ -50,24 +46,10 @@ assert.equal(snapshot.profileId, DEFAULT_LATENCY_PROFILE_ID);
 assert.equal(snapshot.targets.length, 5);
 assert.equal(snapshot.latency.mel.rtt_ms, 25);
 
-const legacy = decorateLatencyRecord({
-  ping_ct: 30,
-  ping_cu: 40,
-  ping_cm: null,
-  ping_bd: 50,
-  loss_ct: 0,
-  loss_cu: 1,
-  loss_cm: 100,
-  loss_bd: null
-});
-assert.equal(legacy.latency_profile, 'legacy-cn-carriers-v2');
-assert.deepEqual(legacy.latency_targets.map(target => target.key), ['ct', 'cu', 'cm', 'bd']);
-assert.equal(legacy.latency.ct.rtt_ms, 30);
-
-assert.deepEqual(latencyForStorage({ ping_ct: 30, loss_ct: 0 }), {
+assert.deepEqual(latencyForStorage({ unrelated: 30 }), {
   profileId: '',
   latencyJson: ''
 });
-assert.equal(readLatencySnapshot({ ping_ct: 30 }, null, false), null);
+assert.equal(readLatencySnapshot({ unrelated: 30 }), null);
 
 console.log('fork latency tests passed');

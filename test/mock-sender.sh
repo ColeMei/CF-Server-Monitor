@@ -1,7 +1,7 @@
 #!/bin/bash
 # macOS模拟数据发送脚本
 # 用于测试 CF-Server-Monitor 工作原理
-# bash test/mock-sender.sh 550e8400-e29b-41d4-a716-446655440001 123456 http://localhost:8787/update 10 1.3.0
+# bash test/mock-sender.sh 550e8400-e29b-41d4-a716-446655440001 123456 http://localhost:8787/update 10 1.4.0
 # curl -X POST http://localhost:8787/update -H "Content-Type: application/json" -d '{"id":"550e8400-e29b-41d4-a716-446655440001","secret":"123456","metrics":{"cpu":"45.5","ram":"60.2","disk":"35.8"}}'
 
 set -euo pipefail
@@ -21,7 +21,7 @@ SERVER_ID="${1:-550e8400-e29b-41d4-a716-446655440001}"
 SECRET="${2:-123456}"
 WORKER_URL="${3:-https://localhost:8787/update}"
 REPORT_INTERVAL="${4:-10}"
-AGENT_VERSION="${5:-1.3.0}"
+AGENT_VERSION="${5:-1.4.0}"
 
 generate_random() {
     awk -v min="$1" -v max="$2" 'BEGIN{srand(); printf "%.2f", min + rand() * (max - min)}'
@@ -102,14 +102,11 @@ while true; do
     
     IPV4=$(generate_int 0 1)
     IPV6=$(generate_int 0 1)
-    PING_CT=$(generate_int 10 150)
-    PING_CU=$(generate_int 20 200)
-    PING_CM=$(generate_int 30 250)
-    PING_BD=$(generate_int 50 300)
-    LOSS_CT=$(generate_int 0 8)
-    LOSS_CU=$(generate_int 0 12)
-    LOSS_CM=$(generate_int 0 10)
-    LOSS_BD=$(generate_int 0 15)
+    LATENCY_MEL=$(generate_int 10 150)
+    LATENCY_MYS=$(generate_int 20 200)
+    LATENCY_TYO=$(generate_int 30 250)
+    LATENCY_USW=$(generate_int 50 300)
+    LATENCY_CN=$(generate_int 80 350)
     
     NET_RX_MONTHLY=$(generate_int 100000000 1500000000)
     NET_TX_MONTHLY=$(generate_int 150000000 750000000)
@@ -120,14 +117,14 @@ while true; do
     EGPU=$(escape_json "${GPU_INFO}")
     
     PAYLOAD=$(cat <<EOF
-{"id":"$SERVER_ID","secret":"$SECRET","metrics":{"cpu":"$CPU","gpu":"$GPU","gpu_info":"$EGPU","ram":"$RAM","ram_total":"$RAM_TOTAL","ram_used":"$RAM_USED","swap_total":"$SWAP_TOTAL","swap_used":"$SWAP_USED","disk":"$DISK","disk_total":"$DISK_TOTAL","disk_used":"$DISK_USED","load_avg":"$LOAD_AVG","boot_time":"$BOOT_TIME","net_rx":"$RX_NOW","net_tx":"$TX_NOW","net_rx_monthly":"$NET_RX_MONTHLY","net_tx_monthly":"$NET_TX_MONTHLY","net_in_speed":"$RX_SPEED","net_out_speed":"$TX_SPEED","os":"$EOS","arch":"$EARCH","cpu_info":"$ECPU","cpu_cores":"$CPU_CORES","processes":"$PROCESSES","tcp_conn":"$TCP_CONN","udp_conn":"$UDP_CONN","ip_v4":"$IPV4","ip_v6":"$IPV6","ping_ct":"$PING_CT","ping_cu":"$PING_CU","ping_cm":"$PING_CM","ping_bd":"$PING_BD","loss_ct":"$LOSS_CT","loss_cu":"$LOSS_CU","loss_cm":"$LOSS_CM","loss_bd":"$LOSS_BD"}}
+{"id":"$SERVER_ID","secret":"$SECRET","metrics":{"cpu":"$CPU","gpu":"$GPU","gpu_info":"$EGPU","ram":"$RAM","ram_total":"$RAM_TOTAL","ram_used":"$RAM_USED","swap_total":"$SWAP_TOTAL","swap_used":"$SWAP_USED","disk":"$DISK","disk_total":"$DISK_TOTAL","disk_used":"$DISK_USED","load_avg":"$LOAD_AVG","boot_time":"$BOOT_TIME","net_rx":"$RX_NOW","net_tx":"$TX_NOW","net_rx_monthly":"$NET_RX_MONTHLY","net_tx_monthly":"$NET_TX_MONTHLY","net_in_speed":"$RX_SPEED","net_out_speed":"$TX_SPEED","os":"$EOS","arch":"$EARCH","cpu_info":"$ECPU","cpu_cores":"$CPU_CORES","processes":"$PROCESSES","tcp_conn":"$TCP_CONN","udp_conn":"$UDP_CONN","ip_v4":"$IPV4","ip_v6":"$IPV6","latency_profile":"melbourne-global-v1","latency":{"mel":{"rtt_ms":$LATENCY_MEL,"loss_pct":0},"mys":{"rtt_ms":$LATENCY_MYS,"loss_pct":0},"tyo":{"rtt_ms":$LATENCY_TYO,"loss_pct":0},"usw":{"rtt_ms":$LATENCY_USW,"loss_pct":0},"cn":{"rtt_ms":$LATENCY_CN,"loss_pct":0}}}}
 EOF
 )
     
-    RESPONSE=$(curl -s -k -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -H "X-Agent-Version: ${AGENT_VERSION}" -d "$PAYLOAD" -m 5 --connect-timeout 2 "$WORKER_URL" 2>/dev/null || echo "000")
+    RESPONSE=$(curl -s -k -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -H "X-Agent-Version: ${AGENT_VERSION}" -H "X-Agent-Config-Schema: 3" -H "X-Agent-Config-Md5: none" -d "$PAYLOAD" -m 5 --connect-timeout 2 "$WORKER_URL" 2>/dev/null || echo "000")
     
     if [ "$RESPONSE" = "200" ] || [ "$RESPONSE" = "201" ]; then
-        info "[$(date '+%Y-%m-%d %H:%M:%S')] 数据上报成功 - CPU: ${CPU}% | GPU: ${GPU}% | Loss CT: ${LOSS_CT}% | RAM: ${RAM}% | Disk: ${DISK}%"
+        info "[$(date '+%Y-%m-%d %H:%M:%S')] 数据上报成功 - CPU: ${CPU}% | GPU: ${GPU}% | MEL: ${LATENCY_MEL}ms | RAM: ${RAM}% | Disk: ${DISK}%"
     else
         warn "[$(date '+%Y-%m-%d %H:%M:%S')] 数据上报失败 (HTTP: $RESPONSE)"
     fi

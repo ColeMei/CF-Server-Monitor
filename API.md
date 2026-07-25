@@ -208,10 +208,10 @@ CORS_ALLOWED_ORIGINS=https://status.example.com,https://admin.example.com
   ```
   Content-Type: application/json
   X-Agent-Version: <探针版本号>
-  X-Agent-Config-Schema: 2
+  X-Agent-Config-Schema: 3
   X-Agent-Config-Md5: <最后成功应用的配置 MD5，首次为 none>
   ```
-  动态配置请求头为新版探针使用的可选字段；未携带时保持旧版响应协议。
+  生产探针使用 schema 3 请求动态配置。
 - Body（JSON）：
   ```json
   {
@@ -244,14 +244,14 @@ CORS_ALLOWED_ORIGINS=https://status.example.com,https://admin.example.com
       "udp_conn": "4",
       "ip_v4": "1",
       "ip_v6": "1",
-      "ping_ct": "23",
-      "ping_cu": "25",
-      "ping_cm": "30",
-      "ping_bd": "40",
-      "loss_ct": "0",
-      "loss_cu": "0",
-      "loss_cm": "0",
-      "loss_bd": "0"
+      "latency_profile": "melbourne-global-v1",
+      "latency": {
+        "mel": { "rtt_ms": 23, "loss_pct": 0 },
+        "mys": { "rtt_ms": 67, "loss_pct": 0 },
+        "tyo": { "rtt_ms": 128, "loss_pct": 0 },
+        "usw": { "rtt_ms": 182, "loss_pct": 0 },
+        "cn": { "rtt_ms": 241, "loss_pct": 0 }
+      }
     }
   }
   ```
@@ -302,27 +302,16 @@ CORS_ALLOWED_ORIGINS=https://status.example.com,https://admin.example.com
 | `udp_conn`       | string       | -   | 是  | UDP 套接字数                                    |
 | `ip_v4`          | string       | -   | 是  | `1`/`0`，IPv4 可达性                            |
 | `ip_v6`          | string       | -   | 是  | `1`/`0`，IPv6 可达性                            |
-| `ping_ct`        | string       | ms  | 否  | 电信节点延时，**空字符串表示未取到**                        |
-| `ping_cu`        | string       | ms  | 否  | 联通节点延时                                      |
-| `ping_cm`        | string       | ms  | 否  | 移动节点延时                                      |
-| `ping_bd`        | string       | ms  | 否  | BGP 节点延时                                    |
-| `loss_ct`        | string       | %   | 否  | 电信丢包率                                       |
-| `loss_cu`        | string       | %   | 否  | 联通丢包率                                       |
-| `loss_cm`        | string       | %   | 否  | 移动丢包率                                       |
-| `loss_bd`        | string       | %   | 否  | BGP 丢包率                                     |
+| `latency_profile`| string       | -   | 否  | 延迟 profile ID；生产值为 `melbourne-global-v1` |
+| `latency`        | object       | -   | 否  | 按目标 key 索引的 `{ rtt_ms, loss_pct }` 对象；不可达时 `rtt_ms` 为 `null` |
 
 **Response**
 
-- 旧版探针（未携带 `X-Agent-Config-Schema: 2`）：返回 `200 OK`：
-  ```
-  OK
-  ```
-  （`Content-Type: text/plain`）
-- 新版探针且配置 MD5 一致：返回 `204 No Content`，不包含响应体。
-- 新版探针且配置 MD5 不一致：返回 `200 OK`，响应头携带新的
+- schema 3 探针且配置 MD5 一致：返回 `204 No Content`，不包含响应体。
+- schema 3 探针且配置 MD5 不一致：返回 `200 OK`，响应头携带新的
   `X-Agent-Config-Md5`，响应体为按字段名排序的完整 QueryParam 配置：
   ```text
-  collect_interval=0&report_interval=60&reset_day=1&schema_version=2
+  collect_interval=0&report_interval=60&reset_day=1&schema_version=3&latency_profile=melbourne-global-v1&latency_targets=mel:s3.ap-southeast-4.amazonaws.com:443,mys:s3.ap-southeast-5.amazonaws.com:443,tyo:s3.ap-northeast-1.amazonaws.com:443,usw:s3.us-west-2.amazonaws.com:443,cn:oss-cn-beijing.aliyuncs.com:443
   ```
   （`Content-Type: application/x-www-form-urlencoded; charset=utf-8`）
 - 动态配置的字段范围、规范化及客户端校验规则详见 [AGENT_CONFIG.md](./AGENT_CONFIG.md)。
@@ -465,14 +454,13 @@ CORS_ALLOWED_ORIGINS=https://status.example.com,https://admin.example.com
   "processes": 256,
   "tcp_conn": 32,
   "udp_conn": 4,
-  "ping_ct": 23,
-  "ping_cu": 25,
-  "ping_cm": 30,
-  "ping_bd": 40,
-  "loss_ct": 0,
-  "loss_cu": 0,
-  "loss_cm": 0,
-  "loss_bd": 0,
+  "latency_profile": "melbourne-global-v1",
+  "latency_targets": [
+    { "key": "mel", "label": "MEL", "host": "s3.ap-southeast-4.amazonaws.com", "port": 443 }
+  ],
+  "latency": {
+    "mel": { "rtt_ms": 23, "loss_pct": 0 }
+  },
   "ram_total": 8192,
   "ram_used": 3700,
   "swap_total": 2048,
@@ -905,10 +893,8 @@ Header：`X-Turnstile-Token: <token>`（当 `site_options.turnstile_enabled === 
     "password": "<plain text, will be PBKDF2-hashed before save>",
     "cloudflare_account_id": "",
     "cloudflare_token": "",
-    "custom_ct": "gd-ct-dualstack.ip.zstaticcdn.com",
-    "custom_cu": "gd-cu-dualstack.ip.zstaticcdn.com",
-    "custom_cm": "gd-cm-dualstack.ip.zstaticcdn.com",
-    "custom_bd": "lf3-ips.zstaticcdn.com",
+    "latency_profile": "melbourne-global-v1",
+    "latency_targets": "[{\"key\":\"mel\",\"label\":\"MEL\",\"host\":\"s3.ap-southeast-4.amazonaws.com\",\"port\":443}]",
     "expire_reminder": "false"
   }
 }
@@ -1155,8 +1141,9 @@ Header：`X-Turnstile-Token: <token>`（当 `site_options.turnstile_enabled === 
 | `processes`                                   | number             | 进程数                       |
 | `tcp_conn`                                    | number             | TCP 连接数                   |
 | `udp_conn`                                    | number             | UDP 套接字数                  |
-| `ping_ct` / `ping_cu` / `ping_cm` / `ping_bd` | number\|null       | 各运营商延时 (ms)               |
-| `loss_ct` / `loss_cu` / `loss_cm` / `loss_bd` | number\|null       | 各运营商丢包率 (%)               |
+| `latency_profile`                             | string             | 延迟 profile ID                |
+| `latency_targets`                             | array              | 动态目标元数据                    |
+| `latency`                                     | object             | 按目标 key 索引的延迟和丢包率          |
 | `ram_total` / `ram_used`                      | number             | MB                        |
 | `swap_total` / `swap_used`                    | number             | MB                        |
 | `disk_total` / `disk_used`                    | number             | MB                        |
@@ -1184,7 +1171,7 @@ Header：`X-Turnstile-Token: <token>`（当 `site_options.turnstile_enabled === 
 | 字段          | 类型             | 说明                                                                                                                                                                                                                                               |
 | ----------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `timestamp` | number (ms)    | 采样时间                                                                                                                                                                                                                                             |
-| 其余字段        | 视查询 columns 而定 | 当前 `/api/history/all` 固定返回：`cpu, gpu, gpu_info, disk_total, disk_used, processes, net_in_speed, net_out_speed, tcp_conn, udp_conn, ping_ct, ping_cu, ping_cm, ping_bd, loss_ct, loss_cu, loss_cm, loss_bd, swap_total, swap_used, load_avg` |
+| 其余字段        | 视查询 columns 而定 | 当前 `/api/history/all` 固定返回资源指标，以及 `latency_profile`、`latency_json` |
 
 ### 5.4 Settings 对象
 
@@ -1212,10 +1199,8 @@ Header：`X-Turnstile-Token: <token>`（当 `site_options.turnstile_enabled === 
   password: string,              // PBKDF2 哈希值；旧版 MD5 哈希会在成功登录后自动升级
   cloudflare_account_id: string,
   cloudflare_token: string,
-  custom_ct: string,             // 电信测速节点 host[:port]
-  custom_cu: string,             // 联通 host[:port]
-  custom_cm: string,             // 移动 host[:port]
-  custom_bd: string,             // BGP host[:port]
+  latency_profile: string,
+  latency_targets: string,       // JSON 编码的目标元数据
   expire_reminder: 'true' | 'false'
 }
 ```
@@ -1288,7 +1273,8 @@ curl -X POST https://status.example.com/update \
       "os":"Ubuntu 22.04","arch":"x86_64","cpu_info":"Intel Xeon","cpu_cores":"4",
       "processes":"256","tcp_conn":"32","udp_conn":"4",
       "ip_v4":"1","ip_v6":"1",
-      "ping_ct":"23","ping_cu":"25","ping_cm":"30","ping_bd":"40"
+      "latency_profile":"melbourne-global-v1",
+      "latency":{"mel":{"rtt_ms":23,"loss_pct":0}}
     }
   }'
 ```

@@ -224,8 +224,13 @@ Headers: (按需) Authorization, X-Turnstile-Token/Verified
   "processes": 256,
   "tcp_conn": 32,
   "udp_conn": 4,
-  "ping_ct": 23, "ping_cu": 25, "ping_cm": 30, "ping_bd": 40,
-  "loss_ct": 0, "loss_cu": 0, "loss_cm": 0, "loss_bd": 0,
+  "latency_profile": "melbourne-global-v1",
+  "latency_targets": [
+    { "key": "mel", "label": "MEL", "host": "s3.ap-southeast-4.amazonaws.com", "port": 443 }
+  ],
+  "latency": {
+    "mel": { "rtt_ms": 23, "loss_pct": 0 }
+  },
   "ram_total": 8192, "ram_used": 3700,
   "swap_total": 2048, "swap_used": 100,
   "disk_total": 102400, "disk_used": 32000,
@@ -440,14 +445,9 @@ interface Server {
   processes: number;
   tcp_conn: number;
   udp_conn: number;
-  ping_ct: number | null;
-  ping_cu: number | null;
-  ping_cm: number | null;
-  ping_bd: number | null;
-  loss_ct: number | null;
-  loss_cu: number | null;
-  loss_cm: number | null;
-  loss_bd: number | null;
+  latency_profile: string;
+  latency_targets: Array<{ key: string; label: string; host: string; port: number }>;
+  latency: Record<string, { rtt_ms: number | null; loss_pct: number | null }>;
   ram_total: number;
   ram_used: number;
   swap_total: number;
@@ -499,10 +499,8 @@ interface Settings {
   password: string;
   cloudflare_account_id: string;
   cloudflare_token: string;
-  custom_ct: string;
-  custom_cu: string;
-  custom_cm: string;
-  custom_bd: string;
+  latency_profile: string;
+  latency_targets: string;
   expire_reminder: 'true' | 'false';
 }
 

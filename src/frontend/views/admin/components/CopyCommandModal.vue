@@ -6,39 +6,6 @@
         <button class="modal-close" @click="$emit('close')">✕</button>
       </div>
 
-      <div class="form-group">
-        <label class="form-label">{{ trans.targetOs }}</label>
-        <select :value="targetOs" class="form-select" @change="$emit('update:target-os', $event.target.value)">
-          <option value="linux">Linux (Ubuntu/Debian/CentOS)</option>
-          <option value="alpine">Alpine Linux</option>
-          <option value="openwrt">OpenWrt / LEDE / ImmortalWrt</option>
-          <option value="mac">macOS (Intel / Apple Silicon)</option>
-          <option value="windows">Windows</option>
-        </select>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group flex-1">
-          <label class="form-label">{{ trans.customCt }}</label>
-          <input type="text" name="custom_ct" autocomplete="off" :value="customCt" class="form-input" placeholder="gd-ct-dualstack.ip.zstaticcdn.com" readonly>
-        </div>
-        <div class="form-group flex-1">
-          <label class="form-label">{{ trans.customCu }}</label>
-          <input type="text" name="custom_cu" autocomplete="off" :value="customCu" class="form-input" placeholder="gd-cu-dualstack.ip.zstaticcdn.com" readonly>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group flex-1">
-          <label class="form-label">{{ trans.customCm }}</label>
-          <input type="text" name="custom_cm" autocomplete="off" :value="customCm" class="form-input" placeholder="gd-cm-dualstack.ip.zstaticcdn.com" readonly>
-        </div>
-        <div class="form-group flex-1">
-          <label class="form-label">{{ trans.customBd }}</label>
-          <input type="text" name="custom_bd" autocomplete="off" :value="customBd" class="form-input" placeholder="lf3-ips.zstaticcdn.com" readonly>
-        </div>
-      </div>
-
       <div class="form-row">
         <div class="form-group flex-1">
           <label class="form-label">{{ trans.collectInterval }}</label>
@@ -74,7 +41,7 @@
       <div class="form-group">
         <label class="form-label">{{ trans.installCommand }}</label>
         <div class="cmd-input-wrapper" :class="{ copied: copiedCmd }">
-          <span class="cmd-prompt">{{ targetOs === 'windows' ? 'PS' : '$' }}</span>
+          <span class="cmd-prompt">$</span>
           <input type="text" readonly :value="installCommand" class="cmd-input flex-1">
         </div>
       </div>
@@ -94,13 +61,8 @@ defineProps({
   trans: { type: Object, required: true },
   show: { type: Boolean, default: false },
   currentServerName: { type: String, default: '' },
-  targetOs: { type: String, default: 'linux' },
   collectInterval: { type: [Number, String], default: 0 },
   reportInterval: { type: [Number, String], default: 60 },
-  customCt: { type: String, default: '' },
-  customCu: { type: String, default: '' },
-  customCm: { type: String, default: '' },
-  customBd: { type: String, default: '' },
   resetDay: { type: [Number, String], default: 1 },
   rxCorrection: { type: [Number, String], default: '' },
   txCorrection: { type: [Number, String], default: '' },
@@ -108,5 +70,5 @@ defineProps({
   copiedCmd: { type: Boolean, default: false }
 })
 
-defineEmits(['close', 'copy-cmd', 'open-edit-from-copy', 'update:target-os'])
+defineEmits(['close', 'copy-cmd', 'open-edit-from-copy'])
 </script>

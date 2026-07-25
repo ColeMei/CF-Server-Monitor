@@ -258,8 +258,8 @@ WebSocket 收到 `batchUpdate` 消息后，数据**不是立即应用**，而是
 | 网络流量 | `net_in_speed` / `net_out_speed` | B/s | 是（下载 / 上传） |
 | 进程数 | `processes` | 数值 | 否 |
 | 连接数 | `tcp_conn` / `udp_conn` | 数值 | 是（TCP / UDP） |
-| 延迟监控 | `ping_ct / cu / cm / bd` | ms | 是（4 条线） |
-| 丢包率 | `loss_ct / cu / cm / bd` | % | 是（4 条线） |
+| 延迟监控 | `latency_json[*].rtt_ms` | ms | 是（由 profile 动态决定） |
+| 丢包率 | `latency_json[*].loss_pct` | % | 是（由 profile 动态决定） |
 
 > 每个图表的颜色由主题自行定义，推荐使用 CSS 变量以便切换主题。
 
