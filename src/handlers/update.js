@@ -13,6 +13,65 @@ import {
   serializeCorrection
 } from '../utils/agentConfig.js';
 
+// Fork hardening ported from upstream 42ad10a (2.8.7 Beta2). /update parses the body before
+// it can check the secret, which travels inside that body, so any caller could make the
+// Worker parse an arbitrarily large JSON document. Upstream checks only the declared
+// Content-Length, which a chunked request skips; the fork caps the bytes actually read.
+// A schema-v3 report carries one report interval of samples (the agent clears them after
+// every attempt, successful or not), so real payloads are tens of KB.
+export const UPDATE_MAX_REQUEST_BYTES = 512 * 1024;
+
+export class PayloadTooLargeError extends Error {}
+
+function getDeclaredContentLength(request) {
+  const raw = request.headers.get('Content-Length');
+  if (!raw) return null;
+  const length = Number(raw);
+  return Number.isFinite(length) && length >= 0 ? length : null;
+}
+
+export async function readJsonWithinLimit(request, limit = UPDATE_MAX_REQUEST_BYTES) {
+  const declared = getDeclaredContentLength(request);
+  if (declared !== null && declared > limit) throw new PayloadTooLargeError();
+  if (!request.body) return request.json();
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      try { await reader.cancel(); } catch (_) {}
+      throw new PayloadTooLargeError();
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+function createPayloadTooLargeResponse() {
+  return new Response(JSON.stringify({
+    error: 'Payload too large',
+    code: 413,
+    text: 'payload_too_large'
+  }), {
+    status: 413,
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      'X-CFSM-Agent-Status': 'payload_too_large',
+      'Retry-After': '120'
+    }
+  });
+}
+
 // 将最新一次上报打包成前端可直接消费的 "当前状态" 对象
 // 与 /api/server 和 /api/servers 返回的字段保持一致，便于页面直接合并
 function buildPayloadForBroadcast(id, metrics = {}, extra = {}) {
@@ -152,7 +211,16 @@ function _ensureBatchFlush(env) {
 
 export async function handleUpdate(request, env, ctx) {
   try {
-    const data = await request.json();
+    let data;
+    try {
+      data = await readJsonWithinLimit(request);
+    } catch (e) {
+      if (e instanceof PayloadTooLargeError) {
+        console.warn('[Update] 413 Payload too large', { limit: UPDATE_MAX_REQUEST_BYTES });
+        return createPayloadTooLargeResponse();
+      }
+      throw e;
+    }
     const { id, secret } = data;
 
     if (secret !== env.API_SECRET) {
