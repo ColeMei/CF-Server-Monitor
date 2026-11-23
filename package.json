@@ -12,7 +12,7 @@
     "build:github-page": "node scripts/build-github-page.js",
     "test:agent-config": "node test/agent-config.js",
     "test:fork-latency": "node test/fork-latency.js",
-    "test:fork": "node test/fork-latency.js && node test/fork-contract.js",
+    "test:fork": "node test/fork-latency.js && node test/fork-contract.js && node test/fork-update-body-limit.js",
     "preview": "vite preview"
   },
   "keywords": [
